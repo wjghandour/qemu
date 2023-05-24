@@ -1658,6 +1658,7 @@ static void disas_insn_new(DisasContext *s, CPUState *cpu, int b)
             }
 
             /* 4.1.1-4.1.3: No preceding lock, 66, f2, f3, or rex prefixes. */
+	    //IT IS GOOD TO VERIFY IF s->prefix was properly set before being used
             if (s->prefix & (PREFIX_REPZ | PREFIX_REPNZ
                              | PREFIX_LOCK | PREFIX_DATA | PREFIX_REX)) {
                 goto illegal_op;
@@ -1696,6 +1697,75 @@ static void disas_insn_new(DisasContext *s, CPUState *cpu, int b)
             s->prefix |= pp_prefix[vex3 & 3] | PREFIX_VEX;
         }
         break;
+    case 0x62: /* EVEX */
+        int evex2, evex3, evex4; // SHALL WE MOVE THIS INSIDE THE IF STATEMENT
+
+	 evex2 = x86_ldub_code(env, s);
+	 
+	//P[9:8] is identical to VEX.pp.
+
+	  static const int pp_prefix[4] = {
+                0, PREFIX_DATA, PREFIX_REPZ, PREFIX_REPNZ
+          };
+
+          /* 4.1.1-4.1.3: No preceding lock, 66, f2, f3, or rex prefixes. */
+          if (s->prefix & (PREFIX_REPZ | PREFIX_REPNZ
+                             | PREFIX_LOCK | PREFIX_DATA | PREFIX_REX)) {
+	   //QUESTION need to check if we want to decrement pc HERE
+	   // in VEX, it is not decremented
+	        //s->pc--;
+                goto illegal_op;
+          }
+	  
+
+	  // based on section 2.3.5 The VEX Prefix
+	  //Compressed legacy prefix/escape bytes: P[1:0] is identical to the lowest 2 bits of VEX.mmmmm; 
+          switch (evex2 & 0x03) {
+                case 0x00:   /* Reserved for future use.  */
+                    goto unknown_op;
+                case 0x01: /* Implied 0f leading opcode bytes.  */
+                    decode_func = decode_0F;
+                    break;
+                case 0x02: /* Implied 0f 38 leading opcode bytes.  */
+                    decode_func = decode_0F38;
+                    break;
+                case 0x03: /* Implied 0f 3a leading opcode bytes.  */
+                    decode_func = decode_0F3A;
+                    break;
+          }
+
+#ifdef TARGET_X86_64  // here storing the r, x and b bits in the fourth bit
+           s->rex_r = (~evex2 >> 4) & 8; // (~evex2 >> 7) & 1;
+           s->rex_x = (~evex2 >> 3) & 8; //(~evex2 >> 6) & 1;
+           s->rex_b = (~evex2 >> 2) & 8; // (~evex2 >> 5) & 1;
+#endif
+
+          
+// we need to check P[10], it must be 1
+         evex3 = x86_ldub_code(env, s);
+
+	 s->vex_w = (evex3 >> 7) & 1;  // we USED EXISTING vex_w
+
+	  evex4 = x86_ldub_code(env, s);
+
+//QUESTION
+//NEED TO CHECK IF THE BELOW THREE LINE NEED TO BE INCLUDED OR NOT
+//IN VEX, THEY ARE NOT ADDED
+//          s->pc--; /* rewind the advance_pc() x86_ldub_code() did */
+//          s->pc--; /* rewind the advance_pc() x86_ldub_code() did */
+//          s->pc--; /* rewind the advance_pc() x86_ldub_code() did */
+
+	  s->evex_r_prime = (evex2 >> 4) & 1;
+          s->vex_v = (~evex3 >> 3) & 0xf;
+	  s->prefix |= pp_prefix[evex3 & 3] | PREFIX_EVEX;  // P[9:8] is  identical to VEX.pp.
+	  s->evex_v_prime = (evex4 >> 3) & 1;
+	  //s->vex_l = (evex4 >> 5) & 1; i dont think we need to keep it here since we have here l and lprime
+	  s->evex_opmask = evex4 & 0x7;
+	  s->evex_broadcast = (evex4 >> 4) & 1; 
+	  s->evex_destination = (evex4 >> 7) & 1;
+	  s->evex_v_length =  (evex4 >> 5) & 0x3;
+
+	break;
     default:
         if (b >= 0x100) {
             b -= 0x100;
