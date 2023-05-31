@@ -116,6 +116,29 @@
 
 #define avx2_256 .vex_special = X86_VEX_AVX2_256,
 
+// added for avx512
+#define evex1 .evex_class = 1,
+#define evex1_nf .evex_class = 13, 
+#define evex2 .evex_class = 2,
+#define evex2_nf .evex_class = 14, 
+#define evex3 .evex_class = 3,
+#define evex3_nf .evex_class = 15,
+#define evex4 .evex_class = 4,
+#define evex4_nf .evex_class = 16, 
+#define evex5 .evex_class = 5,
+#define evex5_nf .evex_class = 17,
+#define evex6 .evex_class = 6,
+#define evex6_nf .evex_class = 18,
+#define evex7_nf .evex_class = 7,
+#define evex9_nf .evex_class = 9,
+#define evex10 .evex_class = 10,
+#define evex10_nf .evex_class = 19,
+#define evex11 .evex_class = 11,
+#define evex11_nf .evex_class = 20,
+#define evex12 .evex_class = 12,
+#define evex12_nf .evex_class = 21,
+
+
 #define P_00          1
 #define P_66          (1 << PREFIX_DATA)
 #define P_F3          (1 << PREFIX_REPZ)
@@ -1698,9 +1721,10 @@ static void disas_insn_new(DisasContext *s, CPUState *cpu, int b)
         }
         break;
     case 0x62: /* EVEX */
-        int evex2, evex3, evex4; // SHALL WE MOVE THIS INSIDE THE IF STATEMENT
+        int evexB2, evexB3, evexB4; // SHALL WE MOVE THIS INSIDE THE IF STATEMENT
+	//using evex naming here caused compilation errors with evex naming for exceptions, this is why I have used evexB here and in translate.c
 
-	 evex2 = x86_ldub_code(env, s);
+	 evexB2 = x86_ldub_code(env, s);
 	 
 	//P[9:8] is identical to VEX.pp.
 
@@ -1720,7 +1744,7 @@ static void disas_insn_new(DisasContext *s, CPUState *cpu, int b)
 
 	  // based on section 2.3.5 The VEX Prefix
 	  //Compressed legacy prefix/escape bytes: P[1:0] is identical to the lowest 2 bits of VEX.mmmmm; 
-          switch (evex2 & 0x03) {
+          switch (evexB2 & 0x03) {
                 case 0x00:   /* Reserved for future use.  */
                     goto unknown_op;
                 case 0x01: /* Implied 0f leading opcode bytes.  */
@@ -1735,18 +1759,18 @@ static void disas_insn_new(DisasContext *s, CPUState *cpu, int b)
           }
 
 #ifdef TARGET_X86_64  // here storing the r, x and b bits in the fourth bit
-           s->rex_r = (~evex2 >> 4) & 8; // (~evex2 >> 7) & 1;
-           s->rex_x = (~evex2 >> 3) & 8; //(~evex2 >> 6) & 1;
-           s->rex_b = (~evex2 >> 2) & 8; // (~evex2 >> 5) & 1;
+           s->rex_r = (~evexB2 >> 4) & 8; // (~evexB2 >> 7) & 1;
+           s->rex_x = (~evexB2 >> 3) & 8; //(~evexB2 >> 6) & 1;
+           s->rex_b = (~evexB2 >> 2) & 8; // (~evexB2 >> 5) & 1;
 #endif
 
           
 // we need to check P[10], it must be 1
-         evex3 = x86_ldub_code(env, s);
+         evexB3 = x86_ldub_code(env, s);
 
-	 s->vex_w = (evex3 >> 7) & 1;  // we USED EXISTING vex_w
+	 s->vex_w = (evexB3 >> 7) & 1;  // we USED EXISTING vex_w
 
-	  evex4 = x86_ldub_code(env, s);
+	  evexB4 = x86_ldub_code(env, s);
 
 //QUESTION
 //NEED TO CHECK IF THE BELOW THREE LINE NEED TO BE INCLUDED OR NOT
@@ -1755,15 +1779,15 @@ static void disas_insn_new(DisasContext *s, CPUState *cpu, int b)
 //          s->pc--; /* rewind the advance_pc() x86_ldub_code() did */
 //          s->pc--; /* rewind the advance_pc() x86_ldub_code() did */
 
-	  s->evex_r_prime = (evex2 >> 4) & 1;
-          s->vex_v = (~evex3 >> 3) & 0xf;
-	  s->prefix |= pp_prefix[evex3 & 3] | PREFIX_EVEX;  // P[9:8] is  identical to VEX.pp.
-	  s->evex_v_prime = (evex4 >> 3) & 1;
-	  //s->vex_l = (evex4 >> 5) & 1; i dont think we need to keep it here since we have here l and lprime
-	  s->evex_opmask = evex4 & 0x7;
-	  s->evex_broadcast = (evex4 >> 4) & 1; 
-	  s->evex_destination = (evex4 >> 7) & 1;
-	  s->evex_v_length =  (evex4 >> 5) & 0x3;
+	  s->evex_r_prime = (evexB2 >> 4) & 1;
+          s->vex_v = (~evexB3 >> 3) & 0xf;
+	  s->prefix |= pp_prefix[evexB3 & 3] | PREFIX_EVEX;  // P[9:8] is  identical to VEX.pp.
+	  s->evex_v_prime = (evexB4 >> 3) & 1;
+	  //s->vex_l = (evexB4 >> 5) & 1; i dont think we need to keep it here since we have here l and lprime
+	  s->evex_opmask = evexB4 & 0x7;
+	  s->evex_broadcast = (evexB4 >> 4) & 1; 
+	  s->evex_destination = (evexB4 >> 7) & 1;
+	  s->evex_v_length =  (evexB4 >> 5) & 0x3;
 
 	break;
     default:

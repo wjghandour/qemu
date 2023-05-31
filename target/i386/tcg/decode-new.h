@@ -64,6 +64,9 @@ typedef enum X86OpType {
     X86_TYPE_DS,
     X86_TYPE_FS,
     X86_TYPE_GS,
+
+    //added for EVEX
+    X86_TYPE_VXYZ, /* reg in the modrm byte selects an XMM/YMM/ZMM register */
 } X86OpType;
 
 typedef enum X86OpSize {
@@ -93,6 +96,9 @@ typedef enum X86OpSize {
     X86_SIZE_d64,
     X86_SIZE_f64,
     X86_SIZE_ph, /* SSE/AVX packed half precision */
+
+    //Added for EVEX
+    X86_SIZE_xyz, /* 128/256/512-bit, based on operand size */
 } X86OpSize;
 
 typedef enum X86CPUIDFeature {
@@ -102,6 +108,7 @@ typedef enum X86CPUIDFeature {
     X86_FEAT_AES,
     X86_FEAT_AVX,
     X86_FEAT_AVX2,
+    X86_FEAT_AVX512,     //added for AVX512
     X86_FEAT_BMI1,
     X86_FEAT_BMI2,
     X86_FEAT_F16C,
@@ -225,6 +232,7 @@ struct X86OpEntry {
     X86VEXSpecial vex_special:8;
     uint16_t     valid_prefix:16;
     bool         is_decode:1;
+    unsigned     evex_class:8; // added for AVX512 for EVEX-Encoded Instruction Exception Class
 };
 
 typedef struct X86DecodedOp {
