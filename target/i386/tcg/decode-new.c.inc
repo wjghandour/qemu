@@ -1720,7 +1720,7 @@ static void disas_insn_new(DisasContext *s, CPUState *cpu, int b)
             s->prefix |= pp_prefix[vex3 & 3] | PREFIX_VEX;
         }
         break;
-    case 0x62: /* EVEX */
+    case 0x62: /* EVEX */ {
         int evexB2, evexB3, evexB4; // SHALL WE MOVE THIS INSIDE THE IF STATEMENT
 	//using evex naming here caused compilation errors with evex naming for exceptions, this is why I have used evexB here and in translate.c
 
@@ -1789,7 +1789,8 @@ static void disas_insn_new(DisasContext *s, CPUState *cpu, int b)
 	  s->evex_destination = (evexB4 >> 7) & 1;
 	  s->evex_v_length =  (evexB4 >> 5) & 0x3;
 
-	break;
+          break;
+    }
     default:
         if (b >= 0x100) {
             b -= 0x100;

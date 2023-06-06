@@ -65,8 +65,6 @@ typedef enum X86OpType {
     X86_TYPE_FS,
     X86_TYPE_GS,
 
-    //added for EVEX
-    X86_TYPE_VXYZ, /* reg in the modrm byte selects an XMM/YMM/ZMM register */
 } X86OpType;
 
 typedef enum X86OpSize {

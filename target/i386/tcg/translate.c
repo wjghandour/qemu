@@ -3215,7 +3215,7 @@ static bool disas_insn(DisasContext *s, CPUState *cpu)
         }
         break;
 
-    case 0x62: /*EVEX prefix Byte 0 (62h)*/
+    case 0x62: /*EVEX prefix Byte 0 (62h)*/ {
         int evexB2, evexB3;
                  
         if (CODE32(s) && !VM86(s)) {  //SHALL WE PUT EVERYTHING INSIDE THIS IF ??? LIKE IN VEX ???
@@ -3266,7 +3266,7 @@ static bool disas_insn(DisasContext *s, CPUState *cpu)
           //static bool disas_insn(
           // the function returns bool
           //return s->pc;
-
+    }
           break;
     }
 
