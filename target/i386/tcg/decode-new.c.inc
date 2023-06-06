@@ -1542,7 +1542,8 @@ static bool validate_vex(DisasContext *s, X86DecodedInsn *decode)
         /* fall through */
     case 6:
     case 11:
-        if (!(s->prefix & PREFIX_VEX)) {
+        /* TODO_CG: Assume that vex class 6, 11 and 12 are valid for EVEX prefix also. */
+        if (!(s->prefix & (PREFIX_VEX | PREFIX_EVEX))) {
             goto illegal;
         }
         if (!(s->flags & HF_AVX_EN_MASK)) {
