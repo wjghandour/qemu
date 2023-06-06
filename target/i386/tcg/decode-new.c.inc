@@ -1112,11 +1112,12 @@ static bool decode_op_size(DisasContext *s, X86OpEntry *e, X86OpSize size, MemOp
         /* fall through */
     case X86_SIZE_ps: /* SSE/AVX packed single precision */
     case X86_SIZE_pd: /* SSE/AVX packed double precision */
-        *ot = s->vex_l ? MO_256 : MO_128;
+        *ot = get_vex_evex_l(s, MO_512, MO_256, MO_128);
         return true;
 
     case X86_SIZE_ph: /* SSE/AVX packed half precision */
-        *ot = s->vex_l ? MO_128 : MO_64;
+        *ot = get_vex_evex_l(s, 0, MO_128, MO_64);
+        assert(*ot != 0); /* TODO_CG: implement VCVTPH2PS/VCVTPS2PH for EVEX */
         return true;
 
     case X86_SIZE_d64:  /* Default to 64-bit in 64-bit mode */
@@ -1786,12 +1787,11 @@ static void disas_insn_new(DisasContext *s, CPUState *cpu, int b)
           s->vex_v = (~evexB3 >> 3) & 0xf;
 	  s->prefix |= pp_prefix[evexB3 & 3] | PREFIX_EVEX;  // P[9:8] is  identical to VEX.pp.
 	  s->evex_v_prime = (evexB4 >> 3) & 1;
-	  //s->vex_l = (evexB4 >> 5) & 1; i dont think we need to keep it here since we have here l and lprime
 	  s->evex_opmask = evexB4 & 0x7;
 	  s->evex_broadcast = (evexB4 >> 4) & 1; 
 	  s->evex_destination = (evexB4 >> 7) & 1;
 	  s->evex_v_length =  (evexB4 >> 5) & 0x3;
-
+          s->vex_l = s->evex_v_length; /* AVX512_CG: evex_v_length and s->vex_l MUST be equal */
           break;
     }
     default:
