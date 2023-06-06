@@ -97,7 +97,7 @@ typedef struct DisasContext {
     uint8_t cpl;   /* code priv level */
     uint8_t iopl;  /* i/o priv level */
 #endif
-    uint8_t vex_l;  /* vex vector length */
+    uint8_t vex_l;  /* vex vector length : AVX512_CG: 0: 128 bits, 1: 256 bits, 2: 512 bits */
     uint8_t vex_v;  /* vex vvvv register, without 1's complement.  */
     uint8_t popl_esp_hack; /* for correct popl with esp base handling */
     uint8_t rip_offset; /* only used in x86_64, but left for simplicity */
@@ -144,7 +144,7 @@ typedef struct DisasContext {
     uint8_t evex_v_prime; //need to check if we use :1.  P[19]  
     uint8_t evex_opmask;  // P[18:16] encodes op-mask register set k0-k7
     uint8_t evex_broadcast; // P[20]
-    uint8_t evex_v_length; // P[22 : 21]
+    uint8_t evex_v_length; // P[22 : 21] TODO_CG: MUST be equal to vex_l for now */
     uint8_t evex_destination; // P[23]
 } DisasContext;
 
@@ -2977,6 +2977,15 @@ static void gen_sty_env_A0(DisasContext *s, int offset, bool align)
     tcg_gen_ld_i64(s->tmp1_i64, cpu_env, offset + offsetof(YMMReg, YMM_Q(3)));
     tcg_gen_qemu_st_i64(s->tmp1_i64, s->tmp0, mem_index, MO_LEUQ);
 }
+
+/* AVX512_CG: always use get_vex_evex_l instead of accessing vex_l or evex_v_length. */
+#define TODO_CG_0 (0)
+#define TODO_CG_NULL (NULL)
+#define get_vex_evex_l(s, l2, l1, l0) ((s)->vex_l == 2 ?                \
+                                       ({assert((s)->prefix & PREFIX_EVEX); (l2);}) : \
+                                       (s)->vex_l == 1 ?                \
+                                       ({assert((s)->prefix & (PREFIX_VEX|PREFIX_EVEX)); (l1);}) : \
+                                       (l0))
 
 #include "decode-new.h"
 #include "emit.c.inc"
