@@ -1457,6 +1457,8 @@ static bool has_cpuid_feature(DisasContext *s, X86CPUIDFeature cpuid)
         return (s->cpuid_7_0_ebx_features & CPUID_7_0_EBX_BMI2);
     case X86_FEAT_AVX2:
         return (s->cpuid_7_0_ebx_features & CPUID_7_0_EBX_AVX2);
+    case X86_FEAT_AVX512:
+        return (s->cpuid_7_0_ebx_features & CPUID_7_0_EBX_AVX512F);
     }
     g_assert_not_reached();
 }
