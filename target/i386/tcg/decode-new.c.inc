@@ -116,6 +116,28 @@
 
 #define avx2_256 .vex_special = X86_VEX_AVX2_256,
 
+// added for avx512
+#define evex1 .evex_class = 1,
+#define evex1_nf .evex_class = 13, 
+#define evex2 .evex_class = 2,
+#define evex2_nf .evex_class = 14, 
+#define evex3 .evex_class = 3,
+#define evex3_nf .evex_class = 15,
+#define evex4 .evex_class = 4,
+#define evex4_nf .evex_class = 16, 
+#define evex5 .evex_class = 5,
+#define evex5_nf .evex_class = 17,
+#define evex6 .evex_class = 6,
+#define evex6_nf .evex_class = 18,
+#define evex7_nm .evex_class = 7,
+#define evex9_nf .evex_class = 9,
+#define evex10 .evex_class = 10,
+#define evex10_nf .evex_class = 19,
+#define evex11 .evex_class = 11,
+#define evex11_nf .evex_class = 20,
+#define evex12 .evex_class = 12,
+#define evex12_np .evex_class = 21,
+
 
 #define P_00          1
 #define P_66          (1 << PREFIX_DATA)
@@ -994,6 +1016,29 @@ static const X86OpEntry opcodes_root[256] = {
 #undef vex11
 #undef vex12
 #undef vex13
+
+// added for avx512
+#undef evex1 
+#undef evex1_nf 
+#undef evex2 
+#undef evex2_nf 
+#undef evex3 
+#undef evex3_nf 
+#undef evex4 
+#undef evex4_nf 
+#undef evex5 
+#undef evex5_nf 
+#undef evex6 
+#undef evex6_nf 
+#undef evex7_nm 
+#undef evex9_nf 
+#undef evex10 
+#undef evex10_nf 
+#undef evex11 
+#undef evex11_nf 
+#undef evex12 
+#undef evex12_np
+
 
 /*
  * Decode the fixed part of the opcode and place the last
