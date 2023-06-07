@@ -97,7 +97,7 @@ typedef struct DisasContext {
     uint8_t cpl;   /* code priv level */
     uint8_t iopl;  /* i/o priv level */
 #endif
-    uint8_t vex_l;  /* vex vector length */
+    uint8_t vex_l;  /* vex vector length : AVX512_CG: 0: 128 bits, 1: 256 bits, 2: 512 bits */
     uint8_t vex_v;  /* vex vvvv register, without 1's complement.  */
     uint8_t popl_esp_hack; /* for correct popl with esp base handling */
     uint8_t rip_offset; /* only used in x86_64, but left for simplicity */
@@ -144,7 +144,7 @@ typedef struct DisasContext {
     uint8_t evex_v_prime; //need to check if we use :1.  P[19]  
     uint8_t evex_opmask;  // P[18:16] encodes op-mask register set k0-k7
     uint8_t evex_broadcast; // P[20]
-    uint8_t evex_v_length; // P[22 : 21]
+    uint8_t evex_v_length; // P[22 : 21] TODO_CG: MUST be equal to vex_l for now */
     uint8_t evex_destination; // P[23]
 } DisasContext;
 
@@ -2978,6 +2978,15 @@ static void gen_sty_env_A0(DisasContext *s, int offset, bool align)
     tcg_gen_qemu_st_i64(s->tmp1_i64, s->tmp0, mem_index, MO_LEUQ);
 }
 
+/* AVX512_CG: always use get_vex_evex_l instead of accessing vex_l or evex_v_length. */
+#define TODO_CG_0 (0)
+#define TODO_CG_NULL (NULL)
+#define get_vex_evex_l(s, l2, l1, l0) ((s)->vex_l == 2 ?                \
+                                       ({assert((s)->prefix & PREFIX_EVEX); (l2);}) : \
+                                       (s)->vex_l == 1 ?                \
+                                       ({assert((s)->prefix & (PREFIX_VEX|PREFIX_EVEX)); (l1);}) : \
+                                       (l0))
+
 #include "decode-new.h"
 #include "emit.c.inc"
 #include "decode-new.c.inc"
@@ -3215,59 +3224,34 @@ static bool disas_insn(DisasContext *s, CPUState *cpu)
         }
         break;
 
-    case 0x62: /*EVEX prefix Byte 0 (62h)*/
-        int evexB2, evexB3;
-                 
-        if (CODE32(s) && !VM86(s)) {  //SHALL WE PUT EVERYTHING INSIDE THIS IF ??? LIKE IN VEX ???
-            evexB2 = x86_ldub_code(env, s);
+    case 0x62: /* EVEX prefix Byte 0 (62h) */
+        if (CODE32(s) && !VM86(s)) {
+            int evex2, evex3;
+            evex2 = x86_ldub_code(env, s);
             s->pc--; /* rewind the advance_pc() x86_ldub_code() did */
 
-            if (!CODE64(s) && (evexB2 & 0xc0) != 0xc0) {
-                // bound is invalid in 64-bit Mode	
-	       /* In 32-bit mode, bits [7:6] must be 11b,  NEED TO VERIFY THIS LINE, I READ inverted in https://stackoverflow.com/questions/48853237/how-does-the-instruction-decoder-differentiate-between-evex-prefix-and-bound-opc
+            if (!CODE64(s) && (evex2 & 0xc0) != 0xc0) {
+                // bound is invalid in 64-bit Mode
+                /* In 32-bit mode, bits [7:6] must be 11b,  NEED TO VERIFY THIS LINE, I READ inverted in https://stackoverflow.com/questions/48853237/how-does-the-instruction-decoder-differentiate-between-evex-prefix-and-bound-opc
                    otherwise the instruction is bound.  */
                 break;
             }
+            if (!CODE64(s) && (evex2 & 0x0c) != 0x00) {  // is there a need for code64?
+                //Reserved bits: P[3:2] must be 0, otherwise #UD.
+                goto illegal_op;
+            }
+            evex2 = x86_ldub_code(env, s);
+            evex3 = x86_ldub_code(env, s);
+            s->pc -= 2;
+            if (!CODE64(s) && (evex3 & 0x04) != 0x04) {  // is there a need for code64?
+                //Fixed-value bit: P[10] must be 1, otherwise #UD.
+                //THIS NEEDS TO BE CHECKED IF WE NEED TO DECREMENT TWICE OR ONLY ONCE
+                goto illegal_op;
+            }
+            disas_insn_new(s, cpu, b);
+            return true;
         }
-
-// we need to check P[3:2], it must be 00
-        evexB2 = x86_ldub_code(env, s);
-
-          if (!CODE64(s) && (evexB2 & 0x0c) != 0x00) {  // is there a need for code64
-              //Reserved bits: P[3:2] must be 0, otherwise #UD.
-              //WE NEED TO CHECK IF THE DECREMENT IS NEEDED HERE OR NO
-              s->pc--;
-              goto illegal_op;
-	  }
-      
-          
-// we need to check P[10], it must be 1
-         evexB3 = x86_ldub_code(env, s);
-
-          if (!CODE64(s) && (evexB3 & 0x04) != 0x04) {  // is there a need for code64
-              //Fixed-value bit: P[10] must be 1, otherwise #UD.
-              //THIS NEEDS TO BE CHECKED IF WE NEED TO DECREMENT TWICE OR ONLY ONCE
-               s->pc--;
-               s->pc--;
-                    goto illegal_op;
-	  }
-
-          s->pc--; /* rewind the advance_pc() x86_ldub_code() did */
-          s->pc--; /* rewind the advance_pc() x86_ldub_code() did */
-
-
-          //QUESTION
-          // we need to examin how when decrement pc
-          //both in this function and in disas_insn_new
-  
-          disas_insn_new(s, cpu, b);
-          //QUESTION
-          //SHALL WE ADD THE FOLLOWING RETRUN LIKE IT IS DONE FOR VEX ABOVE
-          //static bool disas_insn(
-          // the function returns bool
-          //return s->pc;
-
-          break;
+        break;
     }
 
     /* Post-process prefixes.  */

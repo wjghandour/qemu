@@ -116,28 +116,6 @@
 
 #define avx2_256 .vex_special = X86_VEX_AVX2_256,
 
-// added for avx512
-#define evex1 .evex_class = 1,
-#define evex1_nf .evex_class = 13, 
-#define evex2 .evex_class = 2,
-#define evex2_nf .evex_class = 14, 
-#define evex3 .evex_class = 3,
-#define evex3_nf .evex_class = 15,
-#define evex4 .evex_class = 4,
-#define evex4_nf .evex_class = 16, 
-#define evex5 .evex_class = 5,
-#define evex5_nf .evex_class = 17,
-#define evex6 .evex_class = 6,
-#define evex6_nf .evex_class = 18,
-#define evex7_nf .evex_class = 7,
-#define evex9_nf .evex_class = 9,
-#define evex10 .evex_class = 10,
-#define evex10_nf .evex_class = 19,
-#define evex11 .evex_class = 11,
-#define evex11_nf .evex_class = 20,
-#define evex12 .evex_class = 12,
-#define evex12_nf .evex_class = 21,
-
 
 #define P_00          1
 #define P_66          (1 << PREFIX_DATA)
@@ -1112,11 +1090,12 @@ static bool decode_op_size(DisasContext *s, X86OpEntry *e, X86OpSize size, MemOp
         /* fall through */
     case X86_SIZE_ps: /* SSE/AVX packed single precision */
     case X86_SIZE_pd: /* SSE/AVX packed double precision */
-        *ot = s->vex_l ? MO_256 : MO_128;
+        *ot = get_vex_evex_l(s, MO_512, MO_256, MO_128);
         return true;
 
     case X86_SIZE_ph: /* SSE/AVX packed half precision */
-        *ot = s->vex_l ? MO_128 : MO_64;
+        *ot = get_vex_evex_l(s, 0, MO_128, MO_64);
+        assert(*ot != 0); /* TODO_CG: implement VCVTPH2PS/VCVTPS2PH for EVEX */
         return true;
 
     case X86_SIZE_d64:  /* Default to 64-bit in 64-bit mode */
@@ -1457,6 +1436,8 @@ static bool has_cpuid_feature(DisasContext *s, X86CPUIDFeature cpuid)
         return (s->cpuid_7_0_ebx_features & CPUID_7_0_EBX_BMI2);
     case X86_FEAT_AVX2:
         return (s->cpuid_7_0_ebx_features & CPUID_7_0_EBX_AVX2);
+    case X86_FEAT_AVX512:
+        return (s->cpuid_7_0_ebx_features & CPUID_7_0_EBX_AVX512F);
     }
     g_assert_not_reached();
 }
@@ -1542,7 +1523,8 @@ static bool validate_vex(DisasContext *s, X86DecodedInsn *decode)
         /* fall through */
     case 6:
     case 11:
-        if (!(s->prefix & PREFIX_VEX)) {
+        /* TODO_CG: Assume that vex class 6, 11 and 12 are valid for EVEX prefix also. */
+        if (!(s->prefix & (PREFIX_VEX | PREFIX_EVEX))) {
             goto illegal;
         }
         if (!(s->flags & HF_AVX_EN_MASK)) {
@@ -1720,76 +1702,59 @@ static void disas_insn_new(DisasContext *s, CPUState *cpu, int b)
             s->prefix |= pp_prefix[vex3 & 3] | PREFIX_VEX;
         }
         break;
-    case 0x62: /* EVEX */
-        int evexB2, evexB3, evexB4; // SHALL WE MOVE THIS INSIDE THE IF STATEMENT
-	//using evex naming here caused compilation errors with evex naming for exceptions, this is why I have used evexB here and in translate.c
-
-	 evexB2 = x86_ldub_code(env, s);
+    case 0x62: /* EVEX */ {
+        int evex2, evex3, evex4;
+        evex2 = x86_ldub_code(env, s);
 	 
 	//P[9:8] is identical to VEX.pp.
+        static const int pp_prefix[4] = {
+            0, PREFIX_DATA, PREFIX_REPZ, PREFIX_REPNZ
+        };
 
-	  static const int pp_prefix[4] = {
-                0, PREFIX_DATA, PREFIX_REPZ, PREFIX_REPNZ
-          };
+        /* 4.1.1-4.1.3: No preceding lock, 66, f2, f3, or rex prefixes. */
+        if (s->prefix & (PREFIX_REPZ | PREFIX_REPNZ
+                         | PREFIX_LOCK | PREFIX_DATA | PREFIX_REX)) {
+            goto illegal_op;
+        }
 
-          /* 4.1.1-4.1.3: No preceding lock, 66, f2, f3, or rex prefixes. */
-          if (s->prefix & (PREFIX_REPZ | PREFIX_REPNZ
-                             | PREFIX_LOCK | PREFIX_DATA | PREFIX_REX)) {
-	   //QUESTION need to check if we want to decrement pc HERE
-	   // in VEX, it is not decremented
-	        //s->pc--;
-                goto illegal_op;
-          }
-	  
-
-	  // based on section 2.3.5 The VEX Prefix
-	  //Compressed legacy prefix/escape bytes: P[1:0] is identical to the lowest 2 bits of VEX.mmmmm; 
-          switch (evexB2 & 0x03) {
-                case 0x00:   /* Reserved for future use.  */
-                    goto unknown_op;
-                case 0x01: /* Implied 0f leading opcode bytes.  */
-                    decode_func = decode_0F;
-                    break;
-                case 0x02: /* Implied 0f 38 leading opcode bytes.  */
-                    decode_func = decode_0F38;
-                    break;
-                case 0x03: /* Implied 0f 3a leading opcode bytes.  */
-                    decode_func = decode_0F3A;
-                    break;
-          }
+        // based on section 2.3.5 The VEX Prefix
+        // Compressed legacy prefix/escape bytes: P[1:0] is identical to the lowest 2 bits of VEX.mmmmm
+        switch (evex2 & 0x03) {
+        case 0x00:   /* Reserved for future use.  */
+            goto unknown_op;
+        case 0x01: /* Implied 0f leading opcode bytes.  */
+            decode_func = decode_0F;
+            break;
+        case 0x02: /* Implied 0f 38 leading opcode bytes.  */
+            decode_func = decode_0F38;
+            break;
+        case 0x03: /* Implied 0f 3a leading opcode bytes.  */
+            decode_func = decode_0F3A;
+            break;
+        }
 
 #ifdef TARGET_X86_64  // here storing the r, x and b bits in the fourth bit
-           s->rex_r = (~evexB2 >> 4) & 8; // (~evexB2 >> 7) & 1;
-           s->rex_x = (~evexB2 >> 3) & 8; //(~evexB2 >> 6) & 1;
-           s->rex_b = (~evexB2 >> 2) & 8; // (~evexB2 >> 5) & 1;
+        s->rex_r = (~evex2 >> 4) & 8; // (~evexB2 >> 7) & 1;
+        s->rex_x = (~evex2 >> 3) & 8; //(~evexB2 >> 6) & 1;
+        s->rex_b = (~evex2 >> 2) & 8; // (~evexB2 >> 5) & 1;
 #endif
 
-          
-// we need to check P[10], it must be 1
-         evexB3 = x86_ldub_code(env, s);
+        // we need to check P[10], it must be 1
+        evex3 = x86_ldub_code(env, s);
+        s->vex_w = (evex3 >> 7) & 1;  // we USED EXISTING vex_w
 
-	 s->vex_w = (evexB3 >> 7) & 1;  // we USED EXISTING vex_w
-
-	  evexB4 = x86_ldub_code(env, s);
-
-//QUESTION
-//NEED TO CHECK IF THE BELOW THREE LINE NEED TO BE INCLUDED OR NOT
-//IN VEX, THEY ARE NOT ADDED
-//          s->pc--; /* rewind the advance_pc() x86_ldub_code() did */
-//          s->pc--; /* rewind the advance_pc() x86_ldub_code() did */
-//          s->pc--; /* rewind the advance_pc() x86_ldub_code() did */
-
-	  s->evex_r_prime = (evexB2 >> 4) & 1;
-          s->vex_v = (~evexB3 >> 3) & 0xf;
-	  s->prefix |= pp_prefix[evexB3 & 3] | PREFIX_EVEX;  // P[9:8] is  identical to VEX.pp.
-	  s->evex_v_prime = (evexB4 >> 3) & 1;
-	  //s->vex_l = (evexB4 >> 5) & 1; i dont think we need to keep it here since we have here l and lprime
-	  s->evex_opmask = evexB4 & 0x7;
-	  s->evex_broadcast = (evexB4 >> 4) & 1; 
-	  s->evex_destination = (evexB4 >> 7) & 1;
-	  s->evex_v_length =  (evexB4 >> 5) & 0x3;
-
-	break;
+        evex4 = x86_ldub_code(env, s);
+        s->evex_r_prime = (evex2 >> 4) & 1;
+        s->vex_v = (~evex3 >> 3) & 0xf;
+        s->prefix |= pp_prefix[evex3 & 3] | PREFIX_EVEX;  // P[9:8] is  identical to VEX.pp.
+        s->evex_v_prime = (evex4 >> 3) & 1;
+        s->evex_opmask = evex4 & 0x7;
+        s->evex_broadcast = (evex4 >> 4) & 1;
+        s->evex_destination = (evex4 >> 7) & 1;
+        s->evex_v_length =  (evex4 >> 5) & 0x3;
+        s->vex_l = s->evex_v_length; /* AVX512_CG: evex_v_length and s->vex_l MUST be equal */
+        break;
+    }
     default:
         if (b >= 0x100) {
             b -= 0x100;

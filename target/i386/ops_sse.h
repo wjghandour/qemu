@@ -37,8 +37,10 @@
 #define Q(n) ZMM_Q(n)
 #if SHIFT == 1
 #define SUFFIX _xmm
-#else
+#elif SHIFT == 2
 #define SUFFIX _ymm
+#else
+#define SUFFIX _zmm
 #endif
 #endif
 
@@ -2448,7 +2450,8 @@ void glue(helper_vpgatherqq, SUFFIX)(CPUX86State *env,
 }
 #endif
 
-#if SHIFT >= 2
+/* TODO_CG: implement for zmm (SHIFT == 3) */
+#if SHIFT == 2
 void helper_vpermdq_ymm(Reg *d, Reg *v, Reg *s, uint32_t order)
 {
     uint64_t r0, r1, r2, r3;

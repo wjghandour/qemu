@@ -97,6 +97,8 @@ static inline int xmm_offset(MemOp ot)
         return offsetof(ZMMReg, ZMM_X(0));
     case MO_256:
         return offsetof(ZMMReg, ZMM_Y(0));
+    case MO_512:
+        return 0;
     default:
         g_assert_not_reached();
     }
@@ -320,7 +322,8 @@ static inline int vector_len(DisasContext *s, X86DecodedInsn *decode)
         !(s->prefix & (PREFIX_DATA | PREFIX_REPZ | PREFIX_REPNZ))) {
         return 8;
     }
-    return s->vex_l ? 32 : 16;
+    /* AVX512_CG: support vex_l == 2 */
+    return get_vex_evex_l(s, 64, 32, 16);
 }
 
 static void gen_store_sse(DisasContext *s, X86DecodedInsn *decode, int src_ofs)
@@ -429,8 +432,8 @@ static inline void gen_unary_fp_sse(DisasContext *s, CPUX86State *env, X86Decode
         fn(cpu_env, OP_PTR0, OP_PTR1, OP_PTR2);
     } else {
         SSEFunc_0_epp ps, pd, fn;
-        ps = s->vex_l ? ps_ymm : ps_xmm;
-        pd = s->vex_l ? pd_ymm : pd_xmm;
+        ps = get_vex_evex_l(s, TODO_CG_NULL, ps_ymm, ps_xmm);
+        pd = get_vex_evex_l(s, TODO_CG_NULL, pd_ymm, pd_xmm);
         fn = s->prefix & PREFIX_DATA ? pd : ps;
         if (!fn) {
             gen_illegal_opcode(s);
@@ -467,8 +470,8 @@ static inline void gen_fp_sse(DisasContext *s, CPUX86State *env, X86DecodedInsn 
     if ((s->prefix & (PREFIX_REPZ | PREFIX_REPNZ)) != 0) {
         fn = s->prefix & PREFIX_REPZ ? ss : sd;
     } else {
-        ps = s->vex_l ? ps_ymm : ps_xmm;
-        pd = s->vex_l ? pd_ymm : pd_xmm;
+        ps = get_vex_evex_l(s, TODO_CG_NULL, ps_ymm, ps_xmm);
+        pd = get_vex_evex_l(s, TODO_CG_NULL, pd_ymm, pd_xmm);
         fn = s->prefix & PREFIX_DATA ? pd : ps;
     }
     if (fn) {
@@ -501,7 +504,7 @@ static void gen_##uname##Px(DisasContext *s, CPUX86State *env, X86DecodedInsn *d
 {                                                                                  \
     SSEFunc_0_eppppii xmm = s->vex_w ? gen_helper_fma4pd_xmm : gen_helper_fma4ps_xmm; \
     SSEFunc_0_eppppii ymm = s->vex_w ? gen_helper_fma4pd_ymm : gen_helper_fma4ps_ymm; \
-    SSEFunc_0_eppppii fn = s->vex_l ? ymm : xmm;                                   \
+    SSEFunc_0_eppppii fn = get_vex_evex_l(s, TODO_CG_NULL, ymm, xmm);                 \
                                                                                    \
     fn(cpu_env, OP_PTR0, ptr0, ptr1, ptr2,                                         \
        tcg_constant_i32(even),                                                     \
@@ -573,7 +576,7 @@ static inline void gen_unary_fp32_sse(DisasContext *s, CPUX86State *env, X86Deco
         }
         ss(cpu_env, OP_PTR0, OP_PTR1, OP_PTR2);
     } else {
-        SSEFunc_0_epp fn = s->vex_l ? ps_ymm : ps_xmm;
+        SSEFunc_0_epp fn = get_vex_evex_l(s, TODO_CG_NULL, ps_ymm, ps_xmm);
         if (!fn) {
             goto illegal_op;
         }
@@ -604,8 +607,8 @@ static inline void gen_horizontal_fp_sse(DisasContext *s, CPUX86State *env, X86D
                                          SSEFunc_0_eppp pd_ymm, SSEFunc_0_eppp ps_ymm)
 {
     SSEFunc_0_eppp ps, pd, fn;
-    ps = s->vex_l ? ps_ymm : ps_xmm;
-    pd = s->vex_l ? pd_ymm : pd_xmm;
+    ps = get_vex_evex_l(s, TODO_CG_NULL, ps_ymm, ps_xmm);
+    pd = get_vex_evex_l(s, TODO_CG_NULL, pd_ymm, pd_xmm);
     fn = s->prefix & PREFIX_DATA ? pd : ps;
     fn(cpu_env, OP_PTR0, OP_PTR1, OP_PTR2);
 }
@@ -623,7 +626,7 @@ HORIZONTAL_FP_SSE(VADDSUB, addsub)
 static inline void gen_ternary_sse(DisasContext *s, CPUX86State *env, X86DecodedInsn *decode,
                                    int op3, SSEFunc_0_epppp xmm, SSEFunc_0_epppp ymm)
 {
-    SSEFunc_0_epppp fn = s->vex_l ? ymm : xmm;
+    SSEFunc_0_epppp fn = get_vex_evex_l(s, TODO_CG_NULL, ymm, xmm);
     TCGv_ptr ptr3 = tcg_temp_new_ptr();
 
     /* The format of the fourth input is Lx */
@@ -649,11 +652,8 @@ static inline void gen_binary_imm_sse(DisasContext *s, CPUX86State *env, X86Deco
                                       SSEFunc_0_epppi xmm, SSEFunc_0_epppi ymm)
 {
     TCGv_i32 imm = tcg_constant8u_i32(decode->immediate);
-    if (!s->vex_l) {
-        xmm(cpu_env, OP_PTR0, OP_PTR1, OP_PTR2, imm);
-    } else {
-        ymm(cpu_env, OP_PTR0, OP_PTR1, OP_PTR2, imm);
-    }
+    SSEFunc_0_epppi fn = get_vex_evex_l(s, TODO_CG_NULL, ymm, xmm);
+    fn(cpu_env, OP_PTR0, OP_PTR1, OP_PTR2, imm);
 }
 
 #define BINARY_IMM_SSE(uname, lname)                                               \
@@ -764,10 +764,9 @@ static inline void gen_binary_int_sse(DisasContext *s, CPUX86State *env, X86Deco
     }
     if (!(s->prefix & PREFIX_DATA)) {
         mmx(cpu_env, OP_PTR0, OP_PTR1, OP_PTR2);
-    } else if (!s->vex_l) {
-        xmm(cpu_env, OP_PTR0, OP_PTR1, OP_PTR2);
     } else {
-        ymm(cpu_env, OP_PTR0, OP_PTR1, OP_PTR2);
+        SSEFunc_0_eppp fn = get_vex_evex_l(s, TODO_CG_NULL, ymm, xmm);
+        fn(cpu_env, OP_PTR0, OP_PTR1, OP_PTR2);
     }
 }
 
@@ -849,11 +848,8 @@ BINARY_INT_SSE(VAESENCLAST, aesenclast)
 #define UNARY_CMP_SSE(uname, lname)                                                \
 static void gen_##uname(DisasContext *s, CPUX86State *env, X86DecodedInsn *decode) \
 {                                                                                  \
-    if (!s->vex_l) {                                                               \
-        gen_helper_##lname##_xmm(cpu_env, OP_PTR1, OP_PTR2);                       \
-    } else {                                                                       \
-        gen_helper_##lname##_ymm(cpu_env, OP_PTR1, OP_PTR2);                       \
-    }                                                                              \
+    SSEFunc_0_epp fn = get_vex_evex_l(s, TODO_CG_NULL, gen_helper_##lname##_ymm, gen_helper_##lname##_xmm); \
+    fn(cpu_env, OP_PTR1, OP_PTR2);                                                 \
     set_cc_op(s, CC_OP_EFLAGS);                                                    \
 }
 UNARY_CMP_SSE(VPTEST,     ptest)
@@ -863,11 +859,8 @@ UNARY_CMP_SSE(VTESTPD,    vtestpd)
 static inline void gen_unary_int_sse(DisasContext *s, CPUX86State *env, X86DecodedInsn *decode,
                                      SSEFunc_0_epp xmm, SSEFunc_0_epp ymm)
 {
-    if (!s->vex_l) {
-        xmm(cpu_env, OP_PTR0, OP_PTR2);
-    } else {
-        ymm(cpu_env, OP_PTR0, OP_PTR2);
-    }
+    SSEFunc_0_epp fn = get_vex_evex_l(s, TODO_CG_NULL, ymm, xmm);
+    fn(cpu_env, OP_PTR0, OP_PTR2);
 }
 
 #define UNARY_INT_SSE(uname, lname)                                                \
@@ -909,11 +902,8 @@ static inline void gen_unary_imm_sse(DisasContext *s, CPUX86State *env, X86Decod
                                      SSEFunc_0_ppi xmm, SSEFunc_0_ppi ymm)
 {
     TCGv_i32 imm = tcg_constant8u_i32(decode->immediate);
-    if (!s->vex_l) {
-        xmm(OP_PTR0, OP_PTR1, imm);
-    } else {
-        ymm(OP_PTR0, OP_PTR1, imm);
-    }
+    SSEFunc_0_ppi fn = get_vex_evex_l(s, TODO_CG_NULL, ymm, xmm);
+    fn(OP_PTR0, OP_PTR1, imm);
 }
 
 #define UNARY_IMM_SSE(uname, lname)                                                \
@@ -936,11 +926,8 @@ static inline void gen_unary_imm_fp_sse(DisasContext *s, CPUX86State *env, X86De
                                         SSEFunc_0_eppi xmm, SSEFunc_0_eppi ymm)
 {
     TCGv_i32 imm = tcg_constant8u_i32(decode->immediate);
-    if (!s->vex_l) {
-        xmm(cpu_env, OP_PTR0, OP_PTR1, imm);
-    } else {
-        ymm(cpu_env, OP_PTR0, OP_PTR1, imm);
-    }
+    SSEFunc_0_eppi fn = get_vex_evex_l(s, TODO_CG_NULL, ymm, xmm);
+    fn(cpu_env, OP_PTR0, OP_PTR1, imm);
 }
 
 #define UNARY_IMM_FP_SSE(uname, lname)                                             \
@@ -958,8 +945,8 @@ static inline void gen_vexw_avx(DisasContext *s, CPUX86State *env, X86DecodedIns
                                 SSEFunc_0_eppp d_xmm, SSEFunc_0_eppp q_xmm,
                                 SSEFunc_0_eppp d_ymm, SSEFunc_0_eppp q_ymm)
 {
-    SSEFunc_0_eppp d = s->vex_l ? d_ymm : d_xmm;
-    SSEFunc_0_eppp q = s->vex_l ? q_ymm : q_xmm;
+    SSEFunc_0_eppp d = get_vex_evex_l(s, TODO_CG_NULL, d_ymm, d_xmm);
+    SSEFunc_0_eppp q = get_vex_evex_l(s, TODO_CG_NULL, q_ymm, q_xmm);
     SSEFunc_0_eppp fn = s->vex_w ? q : d;
     fn(cpu_env, OP_PTR0, OP_PTR1, OP_PTR2);
 }
@@ -982,8 +969,8 @@ static inline void gen_vsib_avx(DisasContext *s, CPUX86State *env, X86DecodedIns
                                 SSEFunc_0_epppti d_xmm, SSEFunc_0_epppti q_xmm,
                                 SSEFunc_0_epppti d_ymm, SSEFunc_0_epppti q_ymm)
 {
-    SSEFunc_0_epppti d = s->vex_l ? d_ymm : d_xmm;
-    SSEFunc_0_epppti q = s->vex_l ? q_ymm : q_xmm;
+    SSEFunc_0_epppti d = get_vex_evex_l(s, TODO_CG_NULL, d_ymm, d_xmm);
+    SSEFunc_0_epppti q = get_vex_evex_l(s, TODO_CG_NULL, q_ymm, q_xmm);
     SSEFunc_0_epppti fn = s->vex_w ? q : d;
     TCGv_i32 scale = tcg_constant_i32(decode->mem.scale);
     TCGv_ptr index = tcg_temp_new_ptr();
@@ -996,6 +983,7 @@ static inline void gen_vsib_avx(DisasContext *s, CPUX86State *env, X86DecodedIns
      * There are two output operands, so zero OP1's high 128 bits
      * in the VEX.128 case.
      */
+    assert(s->vex_l != 2); /* TODO_CG: AVX512 output? */
     if (!s->vex_l) {
         int ymmh_ofs = vector_elem_offset(&decode->op[1], MO_128, 1);
         tcg_gen_gvec_dup_imm(MO_64, ymmh_ofs, 16, 16, 0);
@@ -1316,9 +1304,9 @@ static void gen_MOVDQ(DisasContext *s, CPUX86State *env, X86DecodedInsn *decode)
 
 static void gen_MOVMSK(DisasContext *s, CPUX86State *env, X86DecodedInsn *decode)
 {
-    typeof(gen_helper_movmskps_ymm) *ps, *pd, *fn;
-    ps = s->vex_l ? gen_helper_movmskps_ymm : gen_helper_movmskps_xmm;
-    pd = s->vex_l ? gen_helper_movmskpd_ymm : gen_helper_movmskpd_xmm;
+    typeof(gen_helper_movmskps_ymm) *ps, *pd, *fn;    
+    ps = get_vex_evex_l(s, TODO_CG_NULL, gen_helper_movmskps_ymm, gen_helper_movmskps_xmm);
+    pd = get_vex_evex_l(s, TODO_CG_NULL, gen_helper_movmskpd_ymm, gen_helper_movmskpd_xmm);
     fn = s->prefix & PREFIX_DATA ? pd : ps;
     fn(s->tmp2_i32, cpu_env, OP_PTR2);
     tcg_gen_extu_i32_tl(s->T0, s->tmp2_i32);
@@ -1381,10 +1369,9 @@ static void gen_PALIGNR(DisasContext *s, CPUX86State *env, X86DecodedInsn *decod
     TCGv_i32 imm = tcg_constant8u_i32(decode->immediate);
     if (!(s->prefix & PREFIX_DATA)) {
         gen_helper_palignr_mmx(cpu_env, OP_PTR0, OP_PTR1, OP_PTR2, imm);
-    } else if (!s->vex_l) {
-        gen_helper_palignr_xmm(cpu_env, OP_PTR0, OP_PTR1, OP_PTR2, imm);
     } else {
-        gen_helper_palignr_ymm(cpu_env, OP_PTR0, OP_PTR1, OP_PTR2, imm);
+        SSEFunc_0_epppi fn= get_vex_evex_l(s, TODO_CG_NULL, gen_helper_palignr_ymm, gen_helper_palignr_xmm);
+        fn(cpu_env, OP_PTR0, OP_PTR1, OP_PTR2, imm);
     }
 }
 
@@ -1410,7 +1397,8 @@ static void gen_PCMPESTRM(DisasContext *s, CPUX86State *env, X86DecodedInsn *dec
     TCGv_i32 imm = tcg_constant8u_i32(decode->immediate);
     gen_helper_pcmpestrm_xmm(cpu_env, OP_PTR1, OP_PTR2, imm);
     set_cc_op(s, CC_OP_EFLAGS);
-    if ((s->prefix & PREFIX_VEX) && !s->vex_l) {
+    if ((s->prefix & (PREFIX_VEX|PREFIX_EVEX)) && !s->vex_l) {
+        assert(s->vex_l == 1); /* TODO_CG: AVX512 size? */
         tcg_gen_gvec_dup_imm(MO_64, offsetof(CPUX86State, xmm_regs[0].ZMM_X(1)),
                              16, 16, 0);
     }
@@ -1428,7 +1416,8 @@ static void gen_PCMPISTRM(DisasContext *s, CPUX86State *env, X86DecodedInsn *dec
     TCGv_i32 imm = tcg_constant8u_i32(decode->immediate);
     gen_helper_pcmpistrm_xmm(cpu_env, OP_PTR1, OP_PTR2, imm);
     set_cc_op(s, CC_OP_EFLAGS);
-    if ((s->prefix & PREFIX_VEX) && !s->vex_l) {
+    if ((s->prefix & (PREFIX_VEX|PREFIX_EVEX)) && !s->vex_l) {
+        assert(s->vex_l == 1); /* TODO_CG: AVX512 size? */
         tcg_gen_gvec_dup_imm(MO_64, offsetof(CPUX86State, xmm_regs[0].ZMM_X(1)),
                              16, 16, 0);
     }
@@ -1753,24 +1742,16 @@ static void gen_PSRLDQ_i(DisasContext *s, CPUX86State *env, X86DecodedInsn *deco
 {
     int vec_len = vector_len(s, decode);
     TCGv_ptr imm_vec = make_imm8u_xmm_vec(decode->immediate, vec_len);
-
-    if (s->vex_l) {
-        gen_helper_psrldq_ymm(cpu_env, OP_PTR0, OP_PTR1, imm_vec);
-    } else {
-        gen_helper_psrldq_xmm(cpu_env, OP_PTR0, OP_PTR1, imm_vec);
-    }
+    SSEFunc_0_eppp fn = get_vex_evex_l(s, TODO_CG_NULL, gen_helper_psrldq_ymm, gen_helper_psrldq_xmm);
+    fn(cpu_env, OP_PTR0, OP_PTR1, imm_vec);
 }
 
 static void gen_PSLLDQ_i(DisasContext *s, CPUX86State *env, X86DecodedInsn *decode)
 {
     int vec_len = vector_len(s, decode);
     TCGv_ptr imm_vec = make_imm8u_xmm_vec(decode->immediate, vec_len);
-
-    if (s->vex_l) {
-        gen_helper_pslldq_ymm(cpu_env, OP_PTR0, OP_PTR1, imm_vec);
-    } else {
-        gen_helper_pslldq_xmm(cpu_env, OP_PTR0, OP_PTR1, imm_vec);
-    }
+    SSEFunc_0_eppp fn = get_vex_evex_l(s, TODO_CG_NULL, gen_helper_pslldq_ymm, gen_helper_pslldq_xmm);
+    fn(cpu_env, OP_PTR0, OP_PTR1, imm_vec);
 }
 
 static void gen_RORX(DisasContext *s, CPUX86State *env, X86DecodedInsn *decode)
@@ -1852,11 +1833,13 @@ static void gen_VAESIMC(DisasContext *s, CPUX86State *env, X86DecodedInsn *decod
  * f3 = v*ss Vss, Hss, Wps
  * f2 = v*sd Vsd, Hsd, Wps
  */
-#define SSE_CMP(x) { \
-    gen_helper_ ## x ## ps ## _xmm, gen_helper_ ## x ## pd ## _xmm, \
+/* AVX512_CG: Added zmm support */
+#define SSE_CMP(x) {                                \
     gen_helper_ ## x ## ss, gen_helper_ ## x ## sd, \
-    gen_helper_ ## x ## ps ## _ymm, gen_helper_ ## x ## pd ## _ymm}
-static const SSEFunc_0_eppp gen_helper_cmp_funcs[32][6] = {
+    gen_helper_ ## x ## ps ## _xmm, gen_helper_ ## x ## pd ## _xmm, \
+    gen_helper_ ## x ## ps ## _ymm, gen_helper_ ## x ## pd ## _ymm, \
+    gen_helper_ ## x ## ps ## _zmm, gen_helper_ ## x ## pd ## _zmm}
+static const SSEFunc_0_eppp gen_helper_cmp_funcs[32][8] = {
     SSE_CMP(cmpeq),
     SSE_CMP(cmplt),
     SSE_CMP(cmple),
@@ -1897,12 +1880,12 @@ static const SSEFunc_0_eppp gen_helper_cmp_funcs[32][6] = {
 
 static void gen_VCMP(DisasContext *s, CPUX86State *env, X86DecodedInsn *decode)
 {
-    int index = decode->immediate & (s->prefix & PREFIX_VEX ? 31 : 7);
+    int index = decode->immediate & (s->prefix & (PREFIX_VEX|PREFIX_EVEX) ? 31 : 7);
     int b =
-        s->prefix & PREFIX_REPZ  ? 2 /* ss */ :
-        s->prefix & PREFIX_REPNZ ? 3 /* sd */ :
-        !!(s->prefix & PREFIX_DATA) /* pd */ + (s->vex_l << 2);
-
+        s->prefix & PREFIX_REPZ  ? 0 /* ss */ :
+        s->prefix & PREFIX_REPNZ ? 1 /* sd */ :
+        2 + !!(s->prefix & PREFIX_DATA) /* pd */ + (s->vex_l << 1);
+    assert(s->vex_l <= 2); /* AVX512_CG: Added zmm support */
     gen_helper_cmp_funcs[index][b](cpu_env, OP_PTR0, OP_PTR1, OP_PTR2);
 }
 
@@ -2096,11 +2079,8 @@ static void gen_VINSERTx128(DisasContext *s, CPUX86State *env, X86DecodedInsn *d
 static inline void gen_maskmov(DisasContext *s, CPUX86State *env, X86DecodedInsn *decode,
                                SSEFunc_0_eppt xmm, SSEFunc_0_eppt ymm)
 {
-    if (!s->vex_l) {
-        xmm(cpu_env, OP_PTR2, OP_PTR1, s->A0);
-    } else {
-        ymm(cpu_env, OP_PTR2, OP_PTR1, s->A0);
-    }
+    SSEFunc_0_eppt fn = get_vex_evex_l(s, TODO_CG_NULL, ymm, xmm);
+    fn(cpu_env, OP_PTR2, OP_PTR1, s->A0);
 }
 
 static void gen_VMASKMOVPD_st(DisasContext *s, CPUX86State *env, X86DecodedInsn *decode)
@@ -2233,6 +2213,7 @@ static void gen_VPMASKMOV_st(DisasContext *s, CPUX86State *env, X86DecodedInsn *
 static void gen_VPERMD(DisasContext *s, CPUX86State *env, X86DecodedInsn *decode)
 {
     assert(s->vex_l);
+    assert(s->vex_l == 1); /* TODO_CG: AVX512 size? */
     gen_helper_vpermd_ymm(OP_PTR0, OP_PTR1, OP_PTR2);
 }
 
@@ -2240,6 +2221,7 @@ static void gen_VPERM2x128(DisasContext *s, CPUX86State *env, X86DecodedInsn *de
 {
     TCGv_i32 imm = tcg_constant8u_i32(decode->immediate);
     assert(s->vex_l);
+    assert(s->vex_l == 1); /* TODO_CG: AVX512 size? */
     gen_helper_vpermdq_ymm(OP_PTR0, OP_PTR1, OP_PTR2, imm);
 }
 
@@ -2267,8 +2249,8 @@ static void gen_VSHUF(DisasContext *s, CPUX86State *env, X86DecodedInsn *decode)
 {
     TCGv_i32 imm = tcg_constant_i32(decode->immediate);
     SSEFunc_0_pppi ps, pd, fn;
-    ps = s->vex_l ? gen_helper_shufps_ymm : gen_helper_shufps_xmm;
-    pd = s->vex_l ? gen_helper_shufpd_ymm : gen_helper_shufpd_xmm;
+    ps = get_vex_evex_l(s, TODO_CG_NULL, gen_helper_shufps_ymm, gen_helper_shufps_xmm);
+    pd = get_vex_evex_l(s, TODO_CG_NULL, gen_helper_shufpd_ymm, gen_helper_shufpd_xmm);
     fn = s->prefix & PREFIX_DATA ? pd : ps;
     fn(OP_PTR0, OP_PTR1, OP_PTR2, imm);
 }
