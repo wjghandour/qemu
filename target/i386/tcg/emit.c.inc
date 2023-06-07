@@ -1838,7 +1838,7 @@ static void gen_VAESIMC(DisasContext *s, CPUX86State *env, X86DecodedInsn *decod
     gen_helper_ ## x ## ss, gen_helper_ ## x ## sd, \
     gen_helper_ ## x ## ps ## _xmm, gen_helper_ ## x ## pd ## _xmm, \
     gen_helper_ ## x ## ps ## _ymm, gen_helper_ ## x ## pd ## _ymm, \
-    TODO_CG_NULL, TODO_CG_NULL}
+    gen_helper_ ## x ## ps ## _zmm, gen_helper_ ## x ## pd ## _zmm}
 static const SSEFunc_0_eppp gen_helper_cmp_funcs[32][8] = {
     SSE_CMP(cmpeq),
     SSE_CMP(cmplt),

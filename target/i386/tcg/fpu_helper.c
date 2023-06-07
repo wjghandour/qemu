@@ -3116,3 +3116,6 @@ void helper_emms(CPUX86State *env)
 
 #define SHIFT 2
 #include "ops_sse.h"
+
+#define SHIFT 3
+#include "ops_sse.h"
