@@ -23,8 +23,10 @@
 #define Reg ZMMReg
 #if SHIFT == 1
 #define SUFFIX _xmm
-#else
+#elif SHIFT == 2
 #define SUFFIX _ymm
+#else
+#define SUFFIX _zmm
 #endif
 #endif
 
