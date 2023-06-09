@@ -195,12 +195,16 @@ typedef struct DisasContext {
 #define REX_R(S)       ((S)->rex_r + 0)
 #define REX_X(S)       ((S)->rex_x + 0)
 #define REX_B(S)       ((S)->rex_b + 0)
+#define REX_EVEX_RP(S)      ((S)->evex_r_prime + 0)
+#define REX_EVEX_VP(S)      ((S)->evex_v_prime + 0)
 #else
 #define REX_PREFIX(S)  false
 #define REX_W(S)       false
 #define REX_R(S)       0
 #define REX_X(S)       0
 #define REX_B(S)       0
+#define REX_EVEX_RP(S) 0
+#define REX_EVEX_VP(S) 0
 #endif
 
 /*
