@@ -458,6 +458,8 @@ const QEMULogItem qemu_log_items[] = {
       "show generated host assembly code for each compiled TB" },
     { CPU_LOG_TB_IN_ASM, "in_asm",
       "show target assembly code for each compiled TB" },
+    { CPU_LOG_TB_IN_ASM_STEP, "in_asm_step",
+      "show target assembly code before translating each instruction" },
     { CPU_LOG_TB_OP, "op",
       "show micro ops for each compiled TB" },
     { CPU_LOG_TB_OP_OPT, "op_opt",
