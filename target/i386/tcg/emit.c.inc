@@ -196,6 +196,9 @@ static void gen_load_sse(DisasContext *s, TCGv temp, MemOp ot, int dest_ofs, boo
     case MO_256:
         gen_ldy_env_A0(s, dest_ofs, aligned);
         break;
+    case MO_512:
+        gen_ldz_env_A0(s, dest_ofs, aligned);
+        break;
     default:
         g_assert_not_reached();
     }
@@ -346,6 +349,9 @@ static void gen_store_sse(DisasContext *s, X86DecodedInsn *decode, int src_ofs)
         break;
     case MO_256:
         gen_sty_env_A0(s, src_ofs, aligned);
+        break;
+    case MO_512:
+        gen_stz_env_A0(s, src_ofs, aligned);
         break;
     default:
         g_assert_not_reached();
@@ -504,7 +510,8 @@ static void gen_##uname##Px(DisasContext *s, CPUX86State *env, X86DecodedInsn *d
 {                                                                                  \
     SSEFunc_0_eppppii xmm = s->vex_w ? gen_helper_fma4pd_xmm : gen_helper_fma4ps_xmm; \
     SSEFunc_0_eppppii ymm = s->vex_w ? gen_helper_fma4pd_ymm : gen_helper_fma4ps_ymm; \
-    SSEFunc_0_eppppii fn = get_vex_evex_l(s, TODO_CG_NULL, ymm, xmm);                 \
+    SSEFunc_0_eppppii zmm = s->vex_w ? gen_helper_fma4pd_zmm : gen_helper_fma4ps_zmm; \
+    SSEFunc_0_eppppii fn = get_vex_evex_l(s, zmm, ymm, xmm);                       \
                                                                                    \
     fn(cpu_env, OP_PTR0, ptr0, ptr1, ptr2,                                         \
        tcg_constant_i32(even),                                                     \

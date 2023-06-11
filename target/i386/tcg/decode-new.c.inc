@@ -429,8 +429,8 @@ static const X86OpEntry opcodes_0F38_00toEF[240] = {
     [0x3e] = X86_OP_ENTRY3(PMAXUW,        V,x,  H,x, W,x,  vex4 cpuid(SSE41) avx2_256 p_66),
     [0x3f] = X86_OP_ENTRY3(PMAXUD,        V,x,  H,x, W,x,  vex4 cpuid(SSE41) avx2_256 p_66),
 
-    [0x58] = X86_OP_ENTRY3(VPBROADCASTD,   V,x,  None,None, W,d,  vex6 cpuid(AVX2) p_66),
-    [0x59] = X86_OP_ENTRY3(VPBROADCASTQ,   V,x,  None,None, W,q,  vex6 cpuid(AVX2) p_66),
+    [0x58] = X86_OP_ENTRY3(VPBROADCASTD,   V,x,  None,None, W,d,  vex6 cpuid(AVX2) p_66 ecpuid(AVX512F_VL) etupl(TUPLE1_SCALAR)),
+    [0x59] = X86_OP_ENTRY3(VPBROADCASTQ,   V,x,  None,None, W,q,  vex6 cpuid(AVX2) p_66 ecpuid(AVX512F_VL) etupl(TUPLE1_SCALAR)),
     [0x5a] = X86_OP_ENTRY3(VBROADCASTx128, V,qq, None,None, WM,dq,vex6 cpuid(AVX2) p_66),
 
     [0x78] = X86_OP_ENTRY3(VPBROADCASTB,   V,x,  None,None, W,b,  vex6 cpuid(AVX2) p_66),
@@ -458,7 +458,7 @@ static const X86OpEntry opcodes_0F38_00toEF[240] = {
     [0xae] = X86_OP_ENTRY3(VFNMSUB213Px, V,x,  H,x, W,x,  vex6 cpuid(FMA) p_66),
     [0xaf] = X86_OP_ENTRY3(VFNMSUB213Sx, V,x,  H,x, W,x,  vex6 cpuid(FMA) p_66),
 
-    [0xb8] = X86_OP_ENTRY3(VFMADD231Px,  V,x,  H,x, W,x,  vex6 cpuid(FMA) p_66),
+    [0xb8] = X86_OP_ENTRY3(VFMADD231Px,  V,x,  H,x, W,x,  vex6 cpuid(FMA) p_66 ecpuid(AVX512F_VL) etupl(FULL)),
     [0xb9] = X86_OP_ENTRY3(VFMADD231Sx,  V,x,  H,x, W,x,  vex6 cpuid(FMA) p_66),
     [0xba] = X86_OP_ENTRY3(VFMSUB231Px,  V,x,  H,x, W,x,  vex6 cpuid(FMA) p_66),
     [0xbb] = X86_OP_ENTRY3(VFMSUB231Sx,  V,x,  H,x, W,x,  vex6 cpuid(FMA) p_66),
@@ -872,8 +872,8 @@ static const X86OpEntry opcodes_0F[256] = {
     [0x76] = X86_OP_ENTRY3(PCMPEQD,    V,x, H,x, W,x,  vex4 mmx avx2_256 p_00_66),
     [0x77] = X86_OP_GROUP0(0F77),
 
-    [0x28] = X86_OP_ENTRY3(MOVDQ,      V,x,  None,None, W,x, vex1 p_00_66), /* MOVAPS */
-    [0x29] = X86_OP_ENTRY3(MOVDQ,      W,x,  None,None, V,x, vex1 p_00_66), /* MOVAPS */
+    [0x28] = X86_OP_ENTRY3(MOVDQ,      V,x,  None,None, W,x, vex1 p_00_66 ecpuid(AVX512F_VL) etupl(FULL_MEM)), /* MOVAPS */
+    [0x29] = X86_OP_ENTRY3(MOVDQ,      W,x,  None,None, V,x, vex1 p_00_66 ecpuid(AVX512F_VL) etupl(FULL_MEM)), /* MOVAPS */
     [0x2A] = X86_OP_GROUP0(0F2A),
     [0x2B] = X86_OP_GROUP0(0F2B),
     [0x2C] = X86_OP_GROUP0(0F2C),
@@ -1089,14 +1089,15 @@ static bool decode_op_size(DisasContext *s, X86OpEntry *e, X86OpSize size, MemOp
         *ot = MO_128;
         return true;
 
-    case X86_SIZE_qq: /* AVX 256-bit */
+    case X86_SIZE_qq: /* AVX 256/512-bit */
         if (!s->vex_l) {
             return false;
         }
         *ot = MO_256;
+        assert(s->vex_l != 2); /* TODO_CG: implement for 512 bits */
         return true;
 
-    case X86_SIZE_x:  /* 128/256-bit, based on operand size */
+    case X86_SIZE_x:  /* 128/256/512-bit, based on operand size */
         if (e->special == X86_SPECIAL_MMX &&
             !(s->prefix & (PREFIX_DATA | PREFIX_REPZ | PREFIX_REPNZ))) {
             *ot = MO_64;
@@ -1643,8 +1644,8 @@ static void evex_adjust_ea_disp8N(DisasContext *s, X86DecodedInsn *decode)
         }
         /* fall through */
     case X86_EVEX_TUPLE_FULL_MEM:
-        assert(s->vex_l > 1);
-        scale = s->vex_l * 16;
+        assert(s->vex_l >= 1);
+        scale = get_vex_evex_l(s, 4, 2, 1) * 16;
         if (tuple == X86_EVEX_TUPLE_HALF ||
             tuple == X86_EVEX_TUPLE_HALF_MEM) {
             scale /= 2;

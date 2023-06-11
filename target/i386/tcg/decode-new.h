@@ -29,7 +29,7 @@ typedef enum X86OpType {
     X86_TYPE_E, /* ALU modrm operand */
     X86_TYPE_F, /* EFLAGS/RFLAGS */
     X86_TYPE_G, /* REG in the modrm byte selects a GPR */
-    X86_TYPE_H, /* For AVX, VEX.vvvv selects an XMM/YMM register */
+    X86_TYPE_H, /* For AVX/AVX512, VEX.vvvv selects an XMM/YMM/ZMM register. AVX512_CG: EVEX.v'|EVEX.vvvv */
     X86_TYPE_I, /* Immediate */
     X86_TYPE_J, /* Relative offset for a jump */
     X86_TYPE_L, /* The upper 4 bits of the immediate select a 128-bit register */
