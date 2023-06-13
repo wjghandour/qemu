@@ -1879,6 +1879,11 @@ static void disas_insn_new(DisasContext *s, CPUState *cpu, int b)
         s->evex_destination = (evex4 >> 7) & 1;
         s->evex_v_length =  (evex4 >> 5) & 0x3;
         s->vex_l = s->evex_v_length; /* AVX512_CG: evex_v_length and s->vex_l MUST be equal */
+
+        /* TODO_CG: as of now, do not support mask registers. */
+        if (s->evex_opmask != 0) {
+            goto unimplemented_op;
+        }
         break;
     }
     default:
@@ -2018,6 +2023,7 @@ static void disas_insn_new(DisasContext *s, CPUState *cpu, int b)
  illegal_op:
     gen_illegal_opcode(s);
     return;
+ unimplemented_op:
  unknown_op:
     gen_unknown_opcode(env, s);
 }
