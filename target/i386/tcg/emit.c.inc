@@ -690,6 +690,7 @@ UNARY_INT_GVEC(VPBROADCASTB,   tcg_gen_gvec_dup_mem, MO_8)
 UNARY_INT_GVEC(VPBROADCASTW,   tcg_gen_gvec_dup_mem, MO_16)
 UNARY_INT_GVEC(VPBROADCASTD,   tcg_gen_gvec_dup_mem, MO_32)
 UNARY_INT_GVEC(VPBROADCASTQ,   tcg_gen_gvec_dup_mem, MO_64)
+UNARY_INT_GVEC(VPBROADCASTDE,   tcg_gen_gvec_dup_mem, MO_32)
 
 
 #define BINARY_INT_GVEC(uname, func, ...)                                          \
