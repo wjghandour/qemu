@@ -245,8 +245,8 @@ static void decode_0F6F(DisasContext *s, CPUX86State *env, X86OpEntry *entry, ui
 {
     static const X86OpEntry opcodes_0F6F[4] = {
         X86_OP_ENTRY3(MOVDQ,       P,q, None,None, Q,q, vex1 mmx),  /* movq */
-        X86_OP_ENTRY3(MOVDQ,       V,x, None,None, W,x, vex1),      /* movdqa */
-        X86_OP_ENTRY3(MOVDQ,       V,x, None,None, W,x, vex4_unal), /* movdqu */
+        X86_OP_ENTRY3(MOVDQ,       V,x, None,None, W,x, vex1 ),      /* movdqa */
+        X86_OP_ENTRY3(MOVDQ,       V,x, None,None, W,x, vex4_unal ecpuid(AVX512F_VL) etupl(FULL_MEM)), /* movdqu */
         {},
     };
     *entry = *decode_by_prefix(s, opcodes_0F6F);
@@ -315,7 +315,7 @@ static void decode_0F7F(DisasContext *s, CPUX86State *env, X86OpEntry *entry, ui
     static const X86OpEntry opcodes_0F7F[4] = {
         X86_OP_ENTRY3(MOVDQ,       W,x, None,None, V,x, vex1 mmx), /* movq */
         X86_OP_ENTRY3(MOVDQ,       W,x, None,None, V,x, vex1), /* movdqa */
-        X86_OP_ENTRY3(MOVDQ,       W,x, None,None, V,x, vex4_unal), /* movdqu */
+        X86_OP_ENTRY3(MOVDQ,       W,x, None,None, V,x, vex4_unal ecpuid(AVX512F_VL) etupl(FULL_MEM)), /* movdqu */
         {},
     };
     *entry = *decode_by_prefix(s, opcodes_0F7F);

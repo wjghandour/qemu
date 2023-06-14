@@ -209,7 +209,7 @@ static bool sse_needs_alignment(DisasContext *s, X86DecodedInsn *decode, MemOp o
     switch (decode->e.vex_class) {
     case 2:
     case 4:
-        if ((s->prefix & PREFIX_VEX) ||
+        if ((s->prefix & (PREFIX_VEX|PREFIX_EVEX)) ||
             decode->e.vex_special == X86_VEX_SSEUnaligned) {
             /* MOST legacy SSE instructions require aligned memory operands, but not all.  */
             return false;
