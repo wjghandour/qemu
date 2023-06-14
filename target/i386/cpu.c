@@ -652,16 +652,18 @@ void x86_cpu_vendor_words2str(char *dst, uint32_t vendor1,
 #define TCG_SVM_FEATURES (CPUID_SVM_NPT | CPUID_SVM_VGIF | \
           CPUID_SVM_SVME_ADDR_CHK)
 #define TCG_KVM_FEATURES 0
+#define TCG_7_0_EBX_FEATURES_AVX512 (CPUID_7_0_EBX_AVX512F | CPUID_7_0_EBX_AVX512VL)
 #define TCG_7_0_EBX_FEATURES (CPUID_7_0_EBX_SMEP | CPUID_7_0_EBX_SMAP | \
           CPUID_7_0_EBX_BMI1 | CPUID_7_0_EBX_BMI2 | CPUID_7_0_EBX_ADX | \
           CPUID_7_0_EBX_PCOMMIT | CPUID_7_0_EBX_CLFLUSHOPT |            \
           CPUID_7_0_EBX_CLWB | CPUID_7_0_EBX_MPX | CPUID_7_0_EBX_FSGSBASE | \
           CPUID_7_0_EBX_ERMS | CPUID_7_0_EBX_AVX2 | \
-          CPUID_7_0_EBX_AVX512F | CPUID_7_0_EBX_AVX512VL)
+          TCG_7_0_EBX_FEATURES_AVX512)
           /* missing:
           CPUID_7_0_EBX_HLE
           CPUID_7_0_EBX_INVPCID, CPUID_7_0_EBX_RTM,
           CPUID_7_0_EBX_RDSEED */
+
 #define TCG_7_0_ECX_FEATURES (CPUID_7_0_ECX_UMIP | CPUID_7_0_ECX_PKU | \
           /* CPUID_7_0_ECX_OSPKE is dynamic */ \
           CPUID_7_0_ECX_LA57 | CPUID_7_0_ECX_PKS | CPUID_7_0_ECX_VAES)
@@ -834,6 +836,7 @@ FeatureWordInfo feature_word_info[FEATURE_WORDS] = {
             .reg = R_EBX,
         },
         .tcg_features = TCG_7_0_EBX_FEATURES,
+        .avx512_features = TCG_7_0_EBX_FEATURES_AVX512,
     },
     [FEAT_7_0_ECX] = {
         .type = CPUID_FEATURE_WORD,
@@ -4336,6 +4339,7 @@ static X86CPUVersion x86_cpu_model_resolve_version(const X86CPUModel *model)
 static Property max_x86_cpu_properties[] = {
     DEFINE_PROP_BOOL("migratable", X86CPU, migratable, true),
     DEFINE_PROP_BOOL("host-cache-info", X86CPU, cache_info_passthrough, false),
+    DEFINE_PROP_BOOL("avx512", X86CPU, avx512, false),
     DEFINE_PROP_END_OF_LIST()
 };
 
@@ -6381,7 +6385,9 @@ void x86_cpu_expand_features(X86CPU *cpu, Error **errp)
             env->features[w] |=
                 x86_cpu_get_supported_feature_word(w, cpu->migratable) &
                 ~env->user_features[w] &
-                ~feature_word_info[w].no_autoenable_flags;
+                ~feature_word_info[w].no_autoenable_flags &
+                (cpu->avx512 ? ~0: ~feature_word_info[w].avx512_features)
+                ;
         }
     }
 

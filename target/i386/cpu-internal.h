@@ -47,6 +47,7 @@ typedef struct FeatureWordInfo {
         } msr;
     };
     uint64_t tcg_features; /* Feature flags supported by TCG */
+    uint64_t avx512_features; /* AVX512 Feature flags supported by TCG, used by avx512 property */
     uint64_t unmigratable_flags; /* Feature flags known to be unmigratable */
     uint64_t migratable_flags; /* Feature flags known to be migratable */
     /* Features that shouldn't be auto-enabled by "-cpu host" */
