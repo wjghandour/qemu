@@ -4,17 +4,37 @@
 
 import csv
 import sys
+import logging
+import argparse
 from fnmatch import fnmatch
 
-archs = [
+archs_avx2 = [
     "SSE", "SSE2", "SSE3", "SSSE3", "SSE4_1", "SSE4_2",
-    "AES", "AVX", "AVX2", "AES+AVX", "VAES+AVX",
+    "AES", "AVX", "AVX2", "AES+AVX", #"VAES+AVX",
     "F16C", "FMA",
+]
+
+archs_avx512 = [
+    "AVX512F", "AVX512F+AVX512VL",
 ]
 
 ignore = set(["FISTTP",
     "LDMXCSR", "VLDMXCSR", "STMXCSR", "VSTMXCSR"])
 
+# Errors in the x86.csv file. Ref to Vol2A March 2023 for fixed version
+fixup = {
+    "VCVTDQ2PD xmm1, {k}{z}, xmm2/m128/m32bcst": "VCVTDQ2PD xmm1, {k}{z}, xmm2/m64/m32bcst",
+    "VCVTDQ2PD ymm1, {k}{z}, xmm2/m256/m32bcst": "VCVTDQ2PD ymm1, {k}{z}, xmm2/m128/m32bcst",
+    "VCVTDQ2PD zmm1, {k}{z}, ymm2/m512/m32bcst": "VCVTDQ2PD zmm1, {k}{z}, ymm2/m256/m32bcst",
+    "VCVTPS2PD xmm1, {k}{z}, xmm2/m128/m32bcst": "VCVTPS2PD xmm1, {k}{z}, xmm2/m64/m32bcst",
+    "VCVTPS2PD ymm1, {k}{z}, xmm2/m256/m32bcst": "VCVTPS2PD ymm1, {k}{z}, xmm2/m128/m32bcst",
+    "VCVTPS2PD zmm1, {k}{z}, ymm2/m512/m32bcst": "VCVTPS2PD zmm1, {k}{z}, ymm2/m256/m32bcst{sae}",
+    "VCVTUDQ2PD xmm1, {k}{z}, xmm2/m128/m32bcst": "VCVTUDQ2PD xmm1, {k}{z}, xmm2/m64/m32bcst",
+    "VCVTUDQ2PD ymm1, {k}{z}, xmm2/m256/m32bcst": "VCVTUDQ2PD ymm1, {k}{z}, xmm2/m128/m32bcst",
+    "VCVTUDQ2PD zmm1, {k}{z}, ymm2/m512/m32bcst": "VCVTUDQ2PD zmm1, {k}{z}, ymm2/m256/m32bcst",
+}
+
+# Default mask if not found here will be 0xff
 imask = {
     'vBLENDPD': 0xff,
     'vBLENDPS': 0x0f,
@@ -73,6 +93,7 @@ def reg_w(w):
     raise Exception("bad reg_w %d" % w)
 
 def mem_w(w):
+    offset = 32
     if w == 8:
         t = "BYTE"
     elif w == 16:
@@ -85,23 +106,32 @@ def mem_w(w):
         t = "XMMWORD"
     elif w == 256:
         t = "YMMWORD"
+    elif w == 512:
+        t = "ZMMWORD"
+        offset = 64
     else:
         raise Exception()
 
-    return t + " PTR 32[rdx]"
+    return "%s PTR %s[rdx]" % (t, offset)
 
 class XMMArg():
     isxmm = True
-    def __init__(self, reg, mw):
-        if mw not in [0, 8, 16, 32, 64, 128, 256]:
-            raise Exception("Bad /m width: %s" % w)
+    def __init__(self, reg, mw, mb=None, reg_mod=None):
+        if mw not in [0, 8, 16, 32, 64, 128, 256, 512]:
+            raise Exception("Bad /m width: %s" % mw)
+        if mb is not None and mb not in [32, 64]:
+            raise Exception("Bad m*bcst width: %s" % mb)
         self.reg = reg
         self.mw = mw
+        self.mb = mb
+        self.reg_mod = reg_mod
         self.ismem = mw != 0
     def regstr(self, n):
         if n < 0:
+            # TODO: self.mb ignored for now (additional {1toX} after addressing mode)
             return mem_w(self.mw)
         else:
+            # TODO: reg_mod not used for now (additional {reg_mod} after register)
             return "%smm%d" % (self.reg, n)
 
 class MMArg():
@@ -139,7 +169,8 @@ class ArgImm8u():
             if match(op, k):
                 self.mask = imask[k];
                 return
-        raise Exception("Unknown immediate")
+        self.mask = 0xff
+        #raise Exception("Unknown immediate")
     def vals(self):
         mask = self.mask
         yield 0
@@ -152,7 +183,7 @@ class ArgImm8u():
 
 class ArgRM():
     isxmm = False
-    def __init__(self, rw, mw):
+    def __init__(self, rw, mw, reg_mod=None):
         if rw not in [8, 16, 32, 64]:
             raise Exception("Bad r/w width: %s" % w)
         if mw not in [0, 8, 16, 32, 64]:
@@ -160,48 +191,92 @@ class ArgRM():
         self.rw = rw
         self.mw = mw
         self.ismem = mw != 0
+        self.reg_mod = reg_mod
     def regstr(self, n):
         if n < 0:
             return mem_w(self.mw)
         else:
+            # TODO: reg_mod not used for now (additional {reg_mod} after register)
             return reg_w(self.rw)
 
 class ArgMem():
     isxmm = False
     ismem = True
     def __init__(self, w):
-        if w not in [8, 16, 32, 64, 128, 256]:
+        if w not in [8, 16, 32, 64, 128, 256, 512]:
             raise Exception("Bad mem width: %s" % w)
         self.w = w
     def regstr(self, n):
         return mem_w(self.w)
 
+class ArgK():
+    isxmm = True # Actually K register file, but we want to generate these
+    ismem = False
+    def __init__(self, reg_mod=None):
+        self.reg_mod = reg_mod
+
+    def regstr(self, n):
+        # TODO: reg_mod not used for now (additional {reg_mod} after register)
+        return "k%s" % (n % 8,)
+
+class ArgKMask():
+    isxmm = False
+    ismem = False
+    def __init__(self, default=True, zero=False):
+        self.zero = zero
+        self.default = default
+
+    def regstr(self, n, zero=0):
+        if n == 0:
+            assert self.default
+            return "" # k0 for no write mask
+        z = ""
+        if zero:
+            assert self.zero
+            z = "{z}"
+        return "{k%s}%s" % (n % 8, z)
+
 class SkipInstruction(Exception):
     pass
 
 def ArgGenerator(arg, op):
-    if arg[:3] == 'xmm' or arg[:3] == "ymm":
+    reg_mod = None
+    for mod in ["{er}", "{sae}"]: # must be exclusive
+        if mod in arg:
+            reg_mod = mod[1:-1]
+            arg = arg.replace(mod, "")
+
+    if arg[:3] == 'xmm' or arg[:3] == "ymm" or arg[:3] == "zmm":
         if "/" in arg:
-            r, m = arg.split('/')
+            options = arg.split('/')
+            r, m = options[0], options[1]
             if (m[0] != 'm'):
-                raise Exception("Expected /m: %s", arg)
-            return XMMArg(arg[0], int(m[1:]));
+                raise Exception("Expected /m: '%s'" % (arg,))
+            if len(options) == 2:
+                return XMMArg(arg[0], int(m[1:]))
+            elif len(options) == 3:
+                mb = options[2]
+                if mb != "m32bcst" and mb != "m64bcst":
+                    raise Exception("Expected [xyz]mm*/m*/m[32|64]bcst: '%s'" % (arg,))
+                return XMMArg(arg[0], int(m[1:]), int(mb[1:3]))
         else:
-            return XMMArg(arg[0], 0);
+            return XMMArg(arg[0], 0, reg_mod=reg_mod);
     elif arg[:2] == 'mm':
         if "/" in arg:
             r, m = arg.split('/')
             if (m[0] != 'm'):
                 raise Exception("Expected /m: %s", arg)
-            return MMArg(int(m[1:]));
+            return MMArg(int(m[1:]))
         else:
-            return MMArg(0);
+            return MMArg(0)
     elif arg[:4] == 'imm8':
-        return ArgImm8u(op);
+        return ArgImm8u(op)
     elif arg == '<XMM0>':
         return None
     elif arg[0] == 'r':
-        if '/m' in arg:
+        if arg[:3] == 'rmr':
+            return ArgRM(int(arg[3:]), 0)
+        elif '/m' in arg:
             r, m = arg.split('/')
             if (m[0] != 'm'):
                 raise Exception("Expected /m: %s", arg)
@@ -211,17 +286,26 @@ def ArgGenerator(arg, op):
             else:
                 rw = int(r[1:])
             return ArgRM(rw, mw)
-
-        return ArgRM(int(arg[1:]), 0);
+            
+        return ArgRM(int(arg[1:]), 0, reg_mod=reg_mod);
     elif arg[0] == 'm':
         return ArgMem(int(arg[1:]))
     elif arg[:2] == 'vm':
         return ArgVSIB(arg[-1], int(arg[2:-1]))
+    elif arg[0] == 'k':
+        return ArgK(reg_mod=reg_mod)
+    elif arg[:2] == '{k':
+        if arg == '{k1-k7}':
+            return ArgKMask(default=False, zero=False)
+        elif arg[-3:] == '{z}':
+            return ArgKMask(zero=True)
+        else:
+            return ArgKMask(zero=False)
     else:
         raise Exception("Unrecognised arg: %s", arg)
 
 class InsnGenerator:
-    def __init__(self, op, args):
+    def __init__(self, op, args, accesses):
         self.op = op
         if op[-2:] in ["PH", "PS", "PD", "SS", "SD"]:
             if op[-1] == 'H':
@@ -233,12 +317,14 @@ class InsnGenerator:
         else:
             self.optype = 'I'
 
+        self.accesses = accesses
         try:
-            self.args = list(ArgGenerator(a, op) for a in args)
+            self.args= list(ArgGenerator(a, op) for a in args)
             if not any((x.isxmm for x in self.args)):
                 raise SkipInstruction
             if len(self.args) > 0 and self.args[-1] is None:
                 self.args = self.args[:-1]
+                self.accesses = self.accesses[:-1]
         except SkipInstruction:
             raise
         except Exception as e:
@@ -247,6 +333,13 @@ class InsnGenerator:
     def gen(self):
         regs = (10, 11, 12)
         dest = 9
+
+        kmask = -1, None
+        for n, arg in enumerate(self.args):
+            if isinstance(arg, ArgKMask):
+                kmask = n, arg
+        if kmask[0] != -1:
+            del self.args[kmask[0]]
 
         nreg = len(self.args)
         if nreg == 0:
@@ -257,6 +350,7 @@ class InsnGenerator:
             immarg = self.args[-1]
         else:
             immarg = None
+
         memarg = -1
         for n, arg in enumerate(self.args):
             if arg.ismem:
@@ -331,16 +425,27 @@ class InsnGenerator:
         else:
             raise Exception("Too many regs: %s(%d)" % (self.op, nreg))
 
+        args_expanded = []
         for regv in regset:
-            argstr = []
-            for i in range(nreg):
-                arg = self.args[i]
-                argstr.append(arg.regstr(regv[i]))
+            kregs = [0] if kmask[0] == -1 else ([1] if kmask[1].default == False else [0, 1])
+            for kreg in kregs:
+                zeroes = [0] if kreg == 0 or kmask[0] - 1 == memarg and regv[memarg] == -1 else ([0] if kmask[1].zero == False else [0, 1])
+                for zero in zeroes:
+                    argstr = []
+                    for i in range(nreg):
+                        arg = self.args[i]
+                        if i != kmask[0] - 1:
+                            argstr.append(arg.regstr(regv[i]))
+                        else:
+                            argstr.append(arg.regstr(regv[i]) + kmask[1].regstr(kreg, zero=zero))
+                    args_expanded.append(argstr)
+        for argstr in args_expanded:
             if immarg is None:
                 yield self.op + ' ' + ','.join(argstr)
             else:
                 for immval in immarg.vals():
                     yield self.op + ' ' + ','.join(argstr) + ',' + str(immval)
+                    break
 
 def split0(s):
     if s == '':
@@ -348,25 +453,42 @@ def split0(s):
     return s.split(',')
 
 def main():
+    logging.basicConfig()
+    logger = logging.getLogger(__name__)
+    logger.setLevel(logging.INFO)
+
+    parser = argparse.ArgumentParser(description="AVX/AVX512 table generator")
+    parser.add_argument("--avx512", action='store_true', help="Generate AVX512 subset instread of avx")
+    parser.add_argument("--debug", action='store_true', help="Debug mode")
+    parser.add_argument("CSV", help="input csv file")
+    parser.add_argument("OUT", help="output header file")
+    args = parser.parse_args()
+
+    if args.debug:
+        logger.setLevel(logging.DEBUG)
+
+    subsets = archs_avx512 if args.avx512 else archs_avx2
     n = 0
-    if len(sys.argv) != 3:
-        print("Usage: test-avx.py x86.csv test-avx.h")
-        exit(1)
-    csvfile = open(sys.argv[1], 'r', newline='')
-    with open(sys.argv[2], "w") as outf:
+    csvfile = open(args.CSV, 'r', newline='')
+    with open(args.OUT, "w") as outf:
         outf.write("// Generated by test-avx.py. Do not edit.\n")
         for row in csv.reader(strip_comments(csvfile)):
+            if row[0] in fixup:
+                row[0] = fixup[row[0]]
             insn = row[0].replace(',', '').split()
             if insn[0] in ignore:
                 continue
+            accesses = row[8].split(',')
             cpuid = row[6]
-            if cpuid in archs:
+            if cpuid in subsets:
                 try:
-                    g = InsnGenerator(insn[0], insn[1:])
+                    logger.debug("Insn: %s" % (insn,))
+                    g = InsnGenerator(insn[0], insn[1:], accesses)
                     for insn in g.gen():
                         outf.write('TEST(%d, "%s", %s)\n' % (n, insn, g.optype))
                         n += 1
                 except SkipInstruction:
+                    logger.debug("SKIP: %s" % (insn,))
                     pass
         outf.write("#undef TEST\n")
         csvfile.close()

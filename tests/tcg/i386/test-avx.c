@@ -54,10 +54,10 @@ static void dump_regs(reg_state *s)
     int i;
 
     for (i = 0; i < 16; i++) {
-        dump_ymm("ymm", i, &s->ymm[i], 0);
+        dump_ymm("ymm", i, &s->ymm[i], s->ff);
     }
     for (i = 0; i < 4; i++) {
-        dump_ymm("mem", i, &s->mem0[i], 0);
+        dump_ymm("mem", i, &s->mem0[i], s->ff);
     }
 }
 
