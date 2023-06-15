@@ -256,7 +256,8 @@ struct X86OpEntry {
     uint16_t     valid_prefix:16;
     bool         is_decode:1;
     unsigned     evex_class:8; // added for AVX512 for EVEX-Encoded Instruction Exception Class
-    X86CPUIDFeature evex_cpuid:8; // AVX512_CG: ooverride cpuid when PREFIX_EVEX
+    bool         evex_nf; // NF complement to exception class
+    bool         evex_nb; // no broadcast complement to exception class
     X86EVEXTuple evex_tuple:8; // AVX512_CG: tuple specification for EVEX compact displacement
 };
 

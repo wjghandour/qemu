@@ -206,10 +206,20 @@ static void gen_load_sse(DisasContext *s, TCGv temp, MemOp ot, int dest_ofs, boo
 
 static bool sse_needs_alignment(DisasContext *s, X86DecodedInsn *decode, MemOp ot)
 {
+    if (s->prefix & PREFIX_EVEX) {
+        switch (decode->e.evex_class) {
+        case 1:
+            return ot >= MO_128;
+        default:
+            break;
+        }
+        return false;
+    }
+
     switch (decode->e.vex_class) {
     case 2:
     case 4:
-        if ((s->prefix & (PREFIX_VEX|PREFIX_EVEX)) ||
+        if ((s->prefix & PREFIX_VEX) ||
             decode->e.vex_special == X86_VEX_SSEUnaligned) {
             /* MOST legacy SSE instructions require aligned memory operands, but not all.  */
             return false;
@@ -333,6 +343,7 @@ static void gen_store_sse(DisasContext *s, X86DecodedInsn *decode, int src_ofs)
 {
     MemOp ot = decode->op[0].ot;
     int vec_len = vector_len(s, decode);
+    /* force_aligned = 0: auto, > 0: aligned, < 0, not aligned */
     bool aligned = sse_needs_alignment(s, decode, ot);
 
     if (!decode->op[0].has_ea) {
@@ -532,6 +543,10 @@ FMA_SSE(VFMADD231,  OP_PTR1, OP_PTR2, OP_PTR0, 0)
 FMA_SSE(VFMADD213,  OP_PTR1, OP_PTR0, OP_PTR2, 0)
 FMA_SSE(VFMADD132,  OP_PTR0, OP_PTR2, OP_PTR1, 0)
 
+FMA_SSE_PACKED(E_VFMADD231,  OP_PTR1, OP_PTR2, OP_PTR0, 0, 0)
+FMA_SSE_PACKED(E_VFMADD213,  OP_PTR1, OP_PTR0, OP_PTR2, 0, 0)
+FMA_SSE_PACKED(E_VFMADD132,  OP_PTR0, OP_PTR2, OP_PTR1, 0, 0)
+
 FMA_SSE(VFNMADD231, OP_PTR1, OP_PTR2, OP_PTR0, float_muladd_negate_product)
 FMA_SSE(VFNMADD213, OP_PTR1, OP_PTR0, OP_PTR2, float_muladd_negate_product)
 FMA_SSE(VFNMADD132, OP_PTR0, OP_PTR2, OP_PTR1, float_muladd_negate_product)
@@ -697,7 +712,11 @@ UNARY_INT_GVEC(VPBROADCASTB,   tcg_gen_gvec_dup_mem, MO_8)
 UNARY_INT_GVEC(VPBROADCASTW,   tcg_gen_gvec_dup_mem, MO_16)
 UNARY_INT_GVEC(VPBROADCASTD,   tcg_gen_gvec_dup_mem, MO_32)
 UNARY_INT_GVEC(VPBROADCASTQ,   tcg_gen_gvec_dup_mem, MO_64)
-UNARY_INT_GVEC(VPBROADCASTDE,   tcg_gen_gvec_dup_mem, MO_32)
+
+UNARY_INT_GVEC(E_VPBROADCASTD,   tcg_gen_gvec_dup_mem, MO_32)
+UNARY_INT_GVEC(E_VPBROADCASTQ,   tcg_gen_gvec_dup_mem, MO_64)
+UNARY_INT_GVEC(E_VBROADCASTSS,   tcg_gen_gvec_dup_mem, MO_32)
+UNARY_INT_GVEC(E_VBROADCASTSD,   tcg_gen_gvec_dup_mem, MO_64)
 
 
 #define BINARY_INT_GVEC(uname, func, ...)                                          \
@@ -1306,6 +1325,16 @@ static void gen_MOVD_to(DisasContext *s, CPUX86State *env, X86DecodedInsn *decod
 }
 
 static void gen_MOVDQ(DisasContext *s, CPUX86State *env, X86DecodedInsn *decode)
+{
+    gen_store_sse(s, decode, decode->op[2].offset);
+}
+
+static void gen_E_VMOVDQU(DisasContext *s, CPUX86State *env, X86DecodedInsn *decode)
+{
+    gen_store_sse(s, decode, decode->op[2].offset);
+}
+
+static void gen_E_VMOVAPS(DisasContext *s, CPUX86State *env, X86DecodedInsn *decode)
 {
     gen_store_sse(s, decode, decode->op[2].offset);
 }
