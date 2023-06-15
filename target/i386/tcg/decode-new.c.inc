@@ -116,19 +116,19 @@
 
 #define avx2_256 .vex_special = X86_VEX_AVX2_256,
 
-// added for avx512
-//Table 4-13. EVEX-Encoded Instruction Exception Class Summary
-//check Table 4-14. EVEX Instructions in each Exception Class
+// AVX512_CG: avx512 exception classes
+// Vol 2a Table 4-13: EVEX-Encoded Instruction Exception Class Summary
+// Check Table 4-14. EVEX Instructions in each Exception Class
 // there are more naming not mentioned in table 4-13 such as E7NM.128
-//that are not mentioned below 
+// that are not mentioned below 
 #define evex1 .evex_class = 1,
-#define evex1_nf .evex_class = 13, 
+#define evex1_nf .evex_class = 13,
 #define evex2 .evex_class = 2,
-#define evex2_nf .evex_class = 14, 
+#define evex2_nf .evex_class = 14,
 #define evex3 .evex_class = 3,
 #define evex3_nf .evex_class = 15,
 #define evex4 .evex_class = 4,
-#define evex4_nf .evex_class = 16, 
+#define evex4_nf .evex_class = 16,
 #define evex5 .evex_class = 5,
 #define evex5_nf .evex_class = 17,
 #define evex6 .evex_class = 6,
@@ -141,6 +141,12 @@
 #define evex11_nf .evex_class = 20,
 #define evex12 .evex_class = 12,
 #define evex12_np .evex_class = 21,
+
+/* AVX512_CG: override AVX in case of EVEX prefix */
+#define ecpuid(feat) .evex_cpuid = X86_FEAT_##feat,
+
+/* AVX512_CG: EVEX tuple specification */
+#define etupl(tup) .evex_tuple = X86_EVEX_TUPLE_##tup,
 
 
 #define P_00          1
@@ -265,8 +271,8 @@ static void decode_0F6F(DisasContext *s, CPUX86State *env, X86OpEntry *entry, ui
 {
     static const X86OpEntry opcodes_0F6F[4] = {
         X86_OP_ENTRY3(MOVDQ,       P,q, None,None, Q,q, vex1 mmx),  /* movq */
-        X86_OP_ENTRY3(MOVDQ,       V,x, None,None, W,x, vex1),      /* movdqa */
-        X86_OP_ENTRY3(MOVDQ,       V,x, None,None, W,x, vex4_unal), /* movdqu */
+        X86_OP_ENTRY3(MOVDQ,       V,x, None,None, W,x, vex1 ),      /* movdqa */
+        X86_OP_ENTRY3(MOVDQ,       V,x, None,None, W,x, vex4_unal ecpuid(AVX512F_VL) etupl(FULL_MEM)), /* movdqu */
         {},
     };
     *entry = *decode_by_prefix(s, opcodes_0F6F);
@@ -335,7 +341,7 @@ static void decode_0F7F(DisasContext *s, CPUX86State *env, X86OpEntry *entry, ui
     static const X86OpEntry opcodes_0F7F[4] = {
         X86_OP_ENTRY3(MOVDQ,       W,x, None,None, V,x, vex1 mmx), /* movq */
         X86_OP_ENTRY3(MOVDQ,       W,x, None,None, V,x, vex1), /* movdqa */
-        X86_OP_ENTRY3(MOVDQ,       W,x, None,None, V,x, vex4_unal), /* movdqu */
+        X86_OP_ENTRY3(MOVDQ,       W,x, None,None, V,x, vex4_unal ecpuid(AVX512F_VL) etupl(FULL_MEM)), /* movdqu */
         {},
     };
     *entry = *decode_by_prefix(s, opcodes_0F7F);
@@ -423,8 +429,8 @@ static const X86OpEntry opcodes_0F38_00toEF[240] = {
     [0x0e] = X86_OP_ENTRY3(VTESTPS,   None,None,  V,x,  W,x,  vex4 cpuid(AVX) p_66),
     [0x0f] = X86_OP_ENTRY3(VTESTPD,   None,None,  V,x,  W,x,  vex4 cpuid(AVX) p_66),
 
-    [0x18] = X86_OP_ENTRY3(VPBROADCASTD,   V,x,  None,None, W,d,  vex6 cpuid(AVX) p_66), /* vbroadcastss */
-    [0x19] = X86_OP_ENTRY3(VPBROADCASTQ,   V,qq, None,None, W,q,  vex6 cpuid(AVX) p_66), /* vbroadcastsd */
+    [0x18] = X86_OP_ENTRY3(VPBROADCASTD,   V,x,  None,None, W,d,  vex6 cpuid(AVX) p_66 ecpuid(AVX512F_VL) etupl(TUPLE1_SCALAR)), /* vbroadcastss */
+    [0x19] = X86_OP_ENTRY3(VPBROADCASTQ,   V,qq, None,None, W,q,  vex6 cpuid(AVX) p_66 ecpuid(AVX512F_VL) etupl(TUPLE1_SCALAR)), /* vbroadcastsd */
     [0x1a] = X86_OP_ENTRY3(VBROADCASTx128, V,qq, None,None, WM,dq,vex6 cpuid(AVX) p_66),
     [0x1c] = X86_OP_ENTRY3(PABSB,          V,x,  None,None, W,x,  vex4 cpuid(SSSE3) mmx avx2_256 p_00_66),
     [0x1d] = X86_OP_ENTRY3(PABSW,          V,x,  None,None, W,x,  vex4 cpuid(SSSE3) mmx avx2_256 p_00_66),
@@ -449,8 +455,8 @@ static const X86OpEntry opcodes_0F38_00toEF[240] = {
     [0x3e] = X86_OP_ENTRY3(PMAXUW,        V,x,  H,x, W,x,  vex4 cpuid(SSE41) avx2_256 p_66),
     [0x3f] = X86_OP_ENTRY3(PMAXUD,        V,x,  H,x, W,x,  vex4 cpuid(SSE41) avx2_256 p_66),
 
-    [0x58] = X86_OP_ENTRY3(VPBROADCASTD,   V,x,  None,None, W,d,  vex6 cpuid(AVX2) p_66),
-    [0x59] = X86_OP_ENTRY3(VPBROADCASTQ,   V,x,  None,None, W,q,  vex6 cpuid(AVX2) p_66),
+    [0x58] = X86_OP_ENTRY3(VPBROADCASTD,   V,x,  None,None, W,d,  vex6 cpuid(AVX2) p_66 ecpuid(AVX512F_VL) etupl(TUPLE1_SCALAR)),
+    [0x59] = X86_OP_ENTRY3(VPBROADCASTQ,   V,x,  None,None, W,q,  vex6 cpuid(AVX2) p_66 ecpuid(AVX512F_VL) etupl(TUPLE1_SCALAR)),
     [0x5a] = X86_OP_ENTRY3(VBROADCASTx128, V,qq, None,None, WM,dq,vex6 cpuid(AVX2) p_66),
 
     [0x78] = X86_OP_ENTRY3(VPBROADCASTB,   V,x,  None,None, W,b,  vex6 cpuid(AVX2) p_66),
@@ -478,7 +484,7 @@ static const X86OpEntry opcodes_0F38_00toEF[240] = {
     [0xae] = X86_OP_ENTRY3(VFNMSUB213Px, V,x,  H,x, W,x,  vex6 cpuid(FMA) p_66),
     [0xaf] = X86_OP_ENTRY3(VFNMSUB213Sx, V,x,  H,x, W,x,  vex6 cpuid(FMA) p_66),
 
-    [0xb8] = X86_OP_ENTRY3(VFMADD231Px,  V,x,  H,x, W,x,  vex6 cpuid(FMA) p_66),
+    [0xb8] = X86_OP_ENTRY3(VFMADD231Px,  V,x,  H,x, W,x,  vex6 cpuid(FMA) p_66 ecpuid(AVX512F_VL) etupl(FULL)),
     [0xb9] = X86_OP_ENTRY3(VFMADD231Sx,  V,x,  H,x, W,x,  vex6 cpuid(FMA) p_66),
     [0xba] = X86_OP_ENTRY3(VFMSUB231Px,  V,x,  H,x, W,x,  vex6 cpuid(FMA) p_66),
     [0xbb] = X86_OP_ENTRY3(VFMSUB231Sx,  V,x,  H,x, W,x,  vex6 cpuid(FMA) p_66),
@@ -984,8 +990,8 @@ static const X86OpEntry opcodes_0F[256] = {
     [0x76] = X86_OP_ENTRY3(PCMPEQD,    V,x, H,x, W,x,  vex4 mmx avx2_256 p_00_66),
     [0x77] = X86_OP_GROUP0(0F77),
 
-    [0x28] = X86_OP_ENTRY3(MOVDQ,      V,x,  None,None, W,x, vex1 p_00_66), /* MOVAPS */
-    [0x29] = X86_OP_ENTRY3(MOVDQ,      W,x,  None,None, V,x, vex1 p_00_66), /* MOVAPS */
+    [0x28] = X86_OP_ENTRY3(MOVDQ,      V,x,  None,None, W,x, vex1 p_00_66 ecpuid(AVX512F_VL) etupl(FULL_MEM)), /* MOVAPS */
+    [0x29] = X86_OP_ENTRY3(MOVDQ,      W,x,  None,None, V,x, vex1 p_00_66 ecpuid(AVX512F_VL) etupl(FULL_MEM)), /* MOVAPS */
     [0x2A] = X86_OP_GROUP0(0F2A),
     [0x2B] = X86_OP_GROUP0(0F2B),
     [0x2C] = X86_OP_GROUP0(0F2C),
@@ -1113,7 +1119,7 @@ static const X86OpEntry opcodes_root[256] = {
 #undef vex12
 #undef vex13
 
-// added for avx512
+// AVX512_CG
 #undef evex1 
 #undef evex1_nf 
 #undef evex2 
@@ -1134,6 +1140,8 @@ static const X86OpEntry opcodes_root[256] = {
 #undef evex11_nf 
 #undef evex12 
 #undef evex12_np 
+#undef ecpuid
+#undef etupl
 
 
 /*
@@ -1145,7 +1153,6 @@ static void decode_root(DisasContext *s, CPUX86State *env, X86OpEntry *entry, ui
     *entry = opcodes_root[*b];
 }
 
-
 static int decode_modrm(DisasContext *s, CPUX86State *env, X86DecodedInsn *decode,
                         X86DecodedOp *op, X86OpType type)
 {
@@ -1156,8 +1163,14 @@ static int decode_modrm(DisasContext *s, CPUX86State *env, X86DecodedInsn *decod
             return 0xff;
         }
         op->n = (modrm & 7);
-        if (type != X86_TYPE_Q && type != X86_TYPE_N) {
-            op->n |= REX_B(s);
+        if (s->prefix & PREFIX_EVEX) {
+            /* AVX512_CG: ref to Vol 2A 2-39 Table 2-31 / Table 2-32 */
+            /* REX_X is on bit 4, shift by one */
+            op->n |= REX_B(s) | (REX_X(s) << 1);
+        } else {
+            if (type != X86_TYPE_Q && type != X86_TYPE_N) {
+                op->n |= REX_B(s);
+            }
         }
     } else {
         op->has_ea = true;
@@ -1215,14 +1228,15 @@ static bool decode_op_size(DisasContext *s, X86OpEntry *e, X86OpSize size, MemOp
         *ot = MO_128;
         return true;
 
-    case X86_SIZE_qq: /* AVX 256-bit */
+    case X86_SIZE_qq: /* AVX 256/512-bit */
         if (!s->vex_l) {
             return false;
         }
         *ot = MO_256;
+        assert(s->vex_l != 2); /* TODO_CG: implement for 512 bits */
         return true;
 
-    case X86_SIZE_x:  /* 128/256-bit, based on operand size */
+    case X86_SIZE_x:  /* 128/256/512-bit, based on operand size */
         if (e->special == X86_SPECIAL_MMX &&
             !(s->prefix & (PREFIX_DATA | PREFIX_REPZ | PREFIX_REPNZ))) {
             *ot = MO_64;
@@ -1297,7 +1311,8 @@ static bool decode_op(DisasContext *s, CPUX86State *env, X86DecodedInsn *decode,
             op->unit = X86_OP_SSE;
         }
     get_reg:
-        op->n = ((get_modrm(s, env) >> 3) & 7) | REX_R(s);
+        /* AVX512_CG: extend with EVEX.R' */
+        op->n = ((get_modrm(s, env) >> 3) & 7) | REX_R(s) | REX_EVEX_RP(s);
         break;
 
     case X86_TYPE_E:  /* ALU modrm operand */
@@ -1363,10 +1378,10 @@ static bool decode_op(DisasContext *s, CPUX86State *env, X86DecodedInsn *decode,
         };
         break;
 
-    case X86_TYPE_H:  /* For AVX, VEX.vvvv selects an XMM/YMM register */
-        if ((s->prefix & PREFIX_VEX)) {
+    case X86_TYPE_H:  /* For AVX, VEX.vvvv selects an XMM/YMM/ZMM register. AVX512_CG: extend with EVEX.V' */
+        if ((s->prefix & (PREFIX_VEX|PREFIX_EVEX))) {
             op->unit = X86_OP_SSE;
-            op->n = s->vex_v;
+            op->n = s->vex_v | REX_EVEX_VP(s);
             break;
         }
         if (op == &decode->op[0]) {
@@ -1435,7 +1450,7 @@ static bool decode_op(DisasContext *s, CPUX86State *env, X86DecodedInsn *decode,
 
     case X86_TYPE_VXYZ: // added for AVX512 
         op->unit = X86_OP_SSE;
-        op->n = ((get_modrm(s, env) >> 3) & 7) | REX_R(s) | (s->evex_r_prime << 4);
+        op->n = ((get_modrm(s, env) >> 3) & 7) | REX_R(s) | REX_EVEX_RP(s);
         break;
     }
 
@@ -1468,6 +1483,11 @@ static bool decode_insn(DisasContext *s, CPUX86State *env, X86DecodeFunc decode_
     while (e->is_decode) {
         e->is_decode = false;
         e->decode(s, env, e, &decode->b);
+    }
+
+    if ((s->prefix & PREFIX_EVEX) && e->evex_cpuid == X86_FEAT_None) {
+        /* AVX512_CG: invalid or unimplemented EVEX instruction */
+        return false;
     }
 
     if (!validate_sse_prefix(s, e)) {
@@ -1582,7 +1602,14 @@ static bool has_cpuid_feature(DisasContext *s, X86CPUIDFeature cpuid)
         return (s->cpuid_7_0_ebx_features & CPUID_7_0_EBX_BMI2);
     case X86_FEAT_AVX2:
         return (s->cpuid_7_0_ebx_features & CPUID_7_0_EBX_AVX2);
-    case X86_FEAT_AVX512:
+    case X86_FEAT_AVX512F_VL:
+        /* AVX512_CG: assume that vex_l specifies the vector size
+           and check for AVX512_VL when size is 128/256 bits. */
+        if (s->vex_l >= 1 && s->vex_l <= 2 &&
+            !(s->cpuid_7_0_ebx_features & CPUID_7_0_EBX_AVX512VL))
+            return false;
+        /* fall through */
+    case X86_FEAT_AVX512F:
         return (s->cpuid_7_0_ebx_features & CPUID_7_0_EBX_AVX512F);
     }
     g_assert_not_reached();
@@ -1695,7 +1722,7 @@ static bool validate_vex(DisasContext *s, X86DecodedInsn *decode)
         return true;
     }
 
-    if (s->vex_v != 0 &&
+    if ((s->vex_v|REX_EVEX_VP(s)) != 0 &&
         e->op0 != X86_TYPE_H && e->op0 != X86_TYPE_B &&
         e->op1 != X86_TYPE_H && e->op1 != X86_TYPE_B &&
         e->op2 != X86_TYPE_H && e->op2 != X86_TYPE_B) {
@@ -1822,6 +1849,103 @@ illegal:
     return false;
 
 }
+
+/*
+ * AVX512_CG: adjust memory reference for EVEX Disp8xN compact displacement
+ * Refer to Vol2A 2-41 Tables 2-34 and 2-35
+ */
+static void evex_adjust_ea_disp8N(DisasContext *s, X86DecodedInsn *decode)
+{
+    int scale;
+    int op_idx;
+    X86DecodedOp *op_ea = NULL;
+    MemOp op_size;
+    bool bcast;
+    X86EVEXTuple tuple;
+
+    assert(s->prefix & PREFIX_EVEX);
+
+    tuple = decode->e.evex_tuple;
+    if (tuple == X86_EVEX_TUPLE_NONE)
+        return;
+
+    /* Check that the modrm.mod specifies a disp8 displacement. */
+    if (!s->has_modrm || ((s->modrm >> 6) & 3) != 1)
+        return;
+
+    /* Find the memory operand */
+    for (op_idx = 0; op_idx <= 2; op_idx++) {
+        if (decode->op[op_idx].has_ea) {
+            assert(op_ea == NULL);
+            op_ea = &decode->op[op_idx];
+            break;
+        }
+    }
+    assert(op_ea != NULL);
+    op_size = op_ea->ot;
+    bcast = s->evex_broadcast;
+    switch (tuple) {
+    case X86_EVEX_TUPLE_FULL:
+    case X86_EVEX_TUPLE_HALF:
+        if (bcast) {
+            scale = op_size == MO_64 ? 8: 4;
+            break;
+        }
+        /* fall through */
+    case X86_EVEX_TUPLE_FULL_MEM:
+        assert(s->vex_l >= 1);
+        scale = get_vex_evex_l(s, 4, 2, 1) * 16;
+        if (tuple == X86_EVEX_TUPLE_HALF ||
+            tuple == X86_EVEX_TUPLE_HALF_MEM) {
+            scale /= 2;
+        } else if (tuple == X86_EVEX_TUPLE_QUARTER_MEM) {
+            scale /= 4;
+        } else if (tuple == X86_EVEX_TUPLE_EIGHTH_MEM) {
+            scale /= 8;
+        }
+        break;
+    case X86_EVEX_TUPLE_TUPLE1_SCALAR:
+    case X86_EVEX_TUPLE_TUPLE1_FIXED:
+    case X86_EVEX_TUPLE_TUPLE2:
+    case X86_EVEX_TUPLE_TUPLE4:
+    case X86_EVEX_TUPLE_TUPLE8:
+        switch(op_size) {
+        case MO_8: scale = 1; break;
+        case MO_16: scale = 2; break;
+        case MO_32: scale = 4; break;
+        case MO_64: scale = 8; break;
+        default: scale = -1; break;
+        }
+        if (tuple == X86_EVEX_TUPLE_TUPLE1_FIXED) {
+            assert(op_size == MO_32 || op_size == MO_64);
+        } else if (tuple == X86_EVEX_TUPLE_TUPLE2) {
+            assert(op_size == MO_32 || op_size == MO_64);
+            scale *= 2;
+        } else if (tuple == X86_EVEX_TUPLE_TUPLE4) {
+            assert(op_size == MO_32 || op_size == MO_64);
+            scale *= 4;
+        } else if (tuple == X86_EVEX_TUPLE_TUPLE8) {
+            assert(op_size == MO_32);
+            scale *= 8;
+        }
+        break;
+    case X86_EVEX_TUPLE_MEM128:
+        scale = 16;
+        break;
+    case X86_EVEX_TUPLE_MOVDDUP:
+        switch(s->vex_l) {
+        case 1: scale = 8; break;
+        case 2: scale = 32; break;
+        case 3: scale = 64; break;
+        default: scale = -1; break;
+        }
+        break;
+    default: scale = -1; break;
+    }
+    assert(scale != -1);
+    decode->mem.disp *= scale;
+}
+
 
 /*
  * Convert one instruction. s->base.is_jmp is set if the translation must
@@ -1968,19 +2092,21 @@ static void disas_insn_new(DisasContext *s, CPUState *cpu, int b)
             goto illegal_op;
         }
 
-        // based on section 2.3.5 The VEX Prefix
+        // Based on section Vol2a 2.3.5 The VEX Prefix
         // Compressed legacy prefix/escape bytes: P[1:0] is identical to the lowest 2 bits of VEX.mmmmm
         switch (evex2 & 0x03) {
         case 0x00:   /* Reserved for future use.  */
             goto unknown_op;
         case 0x01: /* Implied 0f leading opcode bytes.  */
             decode_func = decode_0F;
+            goto unimplemented_op; /* TODO_AVX512 */
             break;
         case 0x02: /* Implied 0f 38 leading opcode bytes.  */
             decode_func = decode_0F38_AVX512;
             break;
         case 0x03: /* Implied 0f 3a leading opcode bytes.  */
             decode_func = decode_0F3A;
+            goto unimplemented_op; /* TODO_AVX512 */
             break;
         }
 
@@ -1995,15 +2121,20 @@ static void disas_insn_new(DisasContext *s, CPUState *cpu, int b)
         s->vex_w = (evex3 >> 7) & 1;  // we USED EXISTING vex_w
 
         evex4 = x86_ldub_code(env, s);
-        s->evex_r_prime = (~evex2 >> 4) & 1;
+        s->evex_r_prime = (~evex2) & 16; // Set inverted r' at bit 4 such that a simple '|' operation extends rex_r
         s->vex_v = (~evex3 >> 3) & 0xf;
         s->prefix |= pp_prefix[evex3 & 3] | PREFIX_EVEX;  // P[9:8] is  identical to VEX.pp.
-        s->evex_v_prime = (~evex4 >> 3) & 1;
+        s->evex_v_prime = (~evex4 << 1) & 16;  // Set inverted v' at bit 4 such that a simple '|' operation extends vex_v
         s->evex_opmask = evex4 & 0x7;
         s->evex_broadcast = (evex4 >> 4) & 1;
         s->evex_destination = (evex4 >> 7) & 1;
         s->evex_v_length =  (evex4 >> 5) & 0x3;
         s->vex_l = s->evex_v_length; /* AVX512_CG: evex_v_length and s->vex_l MUST be equal */
+
+        /* TODO_CG: as of now, do not support mask registers. */
+        if (s->evex_opmask != 0) {
+            goto unimplemented_op;
+        }
         break;
     }
     default:
@@ -2046,6 +2177,11 @@ static void disas_insn_new(DisasContext *s, CPUState *cpu, int b)
     }
     if (!decode.e.gen) {
         goto unknown_op;
+    }
+
+    /* AVX512_CG: override cpu_id in case of EVEX */
+    if (s->prefix & PREFIX_EVEX) {
+        decode.e.cpuid = decode.e.evex_cpuid;
     }
 
     if (!has_cpuid_feature(s, decode.e.cpuid)) {
@@ -2124,6 +2260,9 @@ static void disas_insn_new(DisasContext *s, CPUState *cpu, int b)
    
 
     if (decode.op[0].has_ea || decode.op[1].has_ea || decode.op[2].has_ea) {
+        if (s->prefix & PREFIX_EVEX) {
+            evex_adjust_ea_disp8N(s, &decode);
+        }
         gen_load_ea(s, &decode.mem, decode.e.vex_class == 12);
     }
     if (s->prefix & PREFIX_LOCK) {
@@ -2147,6 +2286,7 @@ static void disas_insn_new(DisasContext *s, CPUState *cpu, int b)
  illegal_op:
     gen_illegal_opcode(s);
     return;
+ unimplemented_op:
  unknown_op:
     gen_unknown_opcode(env, s);
 }

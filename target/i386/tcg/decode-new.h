@@ -29,7 +29,7 @@ typedef enum X86OpType {
     X86_TYPE_E, /* ALU modrm operand */
     X86_TYPE_F, /* EFLAGS/RFLAGS */
     X86_TYPE_G, /* REG in the modrm byte selects a GPR */
-    X86_TYPE_H, /* For AVX, VEX.vvvv selects an XMM/YMM register */
+    X86_TYPE_H, /* For AVX/AVX512, VEX.vvvv selects an XMM/YMM/ZMM register. AVX512_CG: EVEX.v'|EVEX.vvvv */
     X86_TYPE_I, /* Immediate */
     X86_TYPE_J, /* Relative offset for a jump */
     X86_TYPE_L, /* The upper 4 bits of the immediate select a 128-bit register */
@@ -42,7 +42,7 @@ typedef enum X86OpType {
     X86_TYPE_S, /* reg selects a segment register */
     X86_TYPE_U, /* R/M in the modrm byte selects an XMM/YMM register */
     X86_TYPE_V, /* reg in the modrm byte selects an XMM/YMM register */
-    X86_TYPE_W, /* XMM/YMM modrm operand */
+    X86_TYPE_W, /* XMM/YMM/ZMM modrm operand (memory or register) AVX512_CG: EVEX or VEX prefix */
     X86_TYPE_X, /* string source */
     X86_TYPE_Y, /* string destination */
 
@@ -88,7 +88,7 @@ typedef enum X86OpSize {
     X86_SIZE_si, /* 32-bit GPR */
     X86_SIZE_v,  /* 16/32/64-bit, based on operand size */
     X86_SIZE_w,  /* 16-bit */
-    X86_SIZE_x,  /* 128/256-bit, based on operand size */
+    X86_SIZE_x,  /* 128/256-bit or 512-bit, based on operand size. AVX512_CG: add 512-bit */
     X86_SIZE_y,  /* 32/64-bit, based on operand size */
     X86_SIZE_z,  /* 16-bit for 16-bit operand size, else 32-bit */
 
@@ -108,7 +108,8 @@ typedef enum X86CPUIDFeature {
     X86_FEAT_AES,
     X86_FEAT_AVX,
     X86_FEAT_AVX2,
-    X86_FEAT_AVX512,     //added for AVX512
+    X86_FEAT_AVX512F,     // AVX512_CG: AVX512F
+    X86_FEAT_AVX512F_VL,  // AVX512_CG: AVX512F + AVX512_VL for XMM/YMM
     X86_FEAT_BMI1,
     X86_FEAT_BMI2,
     X86_FEAT_F16C,
@@ -200,6 +201,28 @@ typedef enum X86VEXSpecial {
 } X86VEXSpecial;
 
 
+/*
+ * AVX512_CG: Tuple specification for EVEX Disp8 compact displacement operand.
+ * Refer to Vol2A 2-41 Table 2-34 and 2-35.
+ */
+typedef enum X86EVEXTuple {
+    X86_EVEX_TUPLE_NONE = 0,
+    X86_EVEX_TUPLE_FULL,
+    X86_EVEX_TUPLE_HALF,
+    X86_EVEX_TUPLE_FULL_MEM,
+    X86_EVEX_TUPLE_TUPLE1_SCALAR,
+    X86_EVEX_TUPLE_TUPLE1_FIXED,
+    X86_EVEX_TUPLE_TUPLE2,
+    X86_EVEX_TUPLE_TUPLE4,
+    X86_EVEX_TUPLE_TUPLE8,
+    X86_EVEX_TUPLE_HALF_MEM,
+    X86_EVEX_TUPLE_QUARTER_MEM,
+    X86_EVEX_TUPLE_EIGHTH_MEM,
+    X86_EVEX_TUPLE_MEM128,
+    X86_EVEX_TUPLE_MOVDDUP,
+} X86EVEXTuple;
+
+
 typedef struct X86OpEntry  X86OpEntry;
 typedef struct X86DecodedInsn X86DecodedInsn;
 
@@ -233,6 +256,8 @@ struct X86OpEntry {
     uint16_t     valid_prefix:16;
     bool         is_decode:1;
     unsigned     evex_class:8; // added for AVX512 for EVEX-Encoded Instruction Exception Class
+    X86CPUIDFeature evex_cpuid:8; // AVX512_CG: ooverride cpuid when PREFIX_EVEX
+    X86EVEXTuple evex_tuple:8; // AVX512_CG: tuple specification for EVEX compact displacement
 };
 
 typedef struct X86DecodedOp {

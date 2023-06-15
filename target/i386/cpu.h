@@ -1916,6 +1916,9 @@ struct ArchCPU {
     /* if true the CPUID code directly forward host cache leaves to the guest */
     bool cache_info_passthrough;
 
+    /* if true, AVX512 features are enabled, this is usefull till AVX512 support is not completed */
+    bool avx512;
+
     /* if true the CPUID code directly forwards
      * host monitor/mwait leaves to the guest */
     struct {

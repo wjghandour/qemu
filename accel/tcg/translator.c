@@ -70,6 +70,18 @@ void translator_loop(CPUState *cpu, TranslationBlock *tb, int *max_insns,
             plugin_gen_insn_start(cpu, db);
         }
 
+#ifdef DEBUG_DISAS
+        if (qemu_loglevel_mask(CPU_LOG_TB_IN_ASM_STEP)
+            && qemu_log_in_addr_range(db->pc_first)) {
+            /* The disas_log hook may use these values rather than recompute.  */
+            FILE *logfile = qemu_log_trylock();
+            if (logfile) {
+                fprintf(logfile, "IN STEP:\n");
+                target_disas_one(logfile, cpu, db->pc_next);
+                qemu_log_unlock(logfile);
+            }
+        }
+#endif
         /* Disassemble one instruction.  The translate_insn hook should
            update db->pc_next and db->is_jmp to indicate what should be
            done next -- either exiting this loop or locate the start of

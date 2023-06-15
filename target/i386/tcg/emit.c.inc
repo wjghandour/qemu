@@ -196,6 +196,9 @@ static void gen_load_sse(DisasContext *s, TCGv temp, MemOp ot, int dest_ofs, boo
     case MO_256:
         gen_ldy_env_A0(s, dest_ofs, aligned);
         break;
+    case MO_512:
+        gen_ldz_env_A0(s, dest_ofs, aligned);
+        break;
     default:
         g_assert_not_reached();
     }
@@ -206,7 +209,7 @@ static bool sse_needs_alignment(DisasContext *s, X86DecodedInsn *decode, MemOp o
     switch (decode->e.vex_class) {
     case 2:
     case 4:
-        if ((s->prefix & PREFIX_VEX) ||
+        if ((s->prefix & (PREFIX_VEX|PREFIX_EVEX)) ||
             decode->e.vex_special == X86_VEX_SSEUnaligned) {
             /* MOST legacy SSE instructions require aligned memory operands, but not all.  */
             return false;
@@ -346,6 +349,9 @@ static void gen_store_sse(DisasContext *s, X86DecodedInsn *decode, int src_ofs)
         break;
     case MO_256:
         gen_sty_env_A0(s, src_ofs, aligned);
+        break;
+    case MO_512:
+        gen_stz_env_A0(s, src_ofs, aligned);
         break;
     default:
         g_assert_not_reached();
@@ -504,7 +510,8 @@ static void gen_##uname##Px(DisasContext *s, CPUX86State *env, X86DecodedInsn *d
 {                                                                                  \
     SSEFunc_0_eppppii xmm = s->vex_w ? gen_helper_fma4pd_xmm : gen_helper_fma4ps_xmm; \
     SSEFunc_0_eppppii ymm = s->vex_w ? gen_helper_fma4pd_ymm : gen_helper_fma4ps_ymm; \
-    SSEFunc_0_eppppii fn = get_vex_evex_l(s, TODO_CG_NULL, ymm, xmm);                 \
+    SSEFunc_0_eppppii zmm = s->vex_w ? gen_helper_fma4pd_zmm : gen_helper_fma4ps_zmm; \
+    SSEFunc_0_eppppii fn = get_vex_evex_l(s, zmm, ymm, xmm);                       \
                                                                                    \
     fn(cpu_env, OP_PTR0, ptr0, ptr1, ptr2,                                         \
        tcg_constant_i32(even),                                                     \
@@ -1399,10 +1406,10 @@ static void gen_PCMPESTRM(DisasContext *s, CPUX86State *env, X86DecodedInsn *dec
     gen_helper_pcmpestrm_xmm(cpu_env, OP_PTR1, OP_PTR2, imm);
     set_cc_op(s, CC_OP_EFLAGS);
     if ((s->prefix & (PREFIX_VEX|PREFIX_EVEX)) && !s->vex_l) {
-        assert(s->vex_l == 1); /* TODO_CG: AVX512 size? */
         tcg_gen_gvec_dup_imm(MO_64, offsetof(CPUX86State, xmm_regs[0].ZMM_X(1)),
                              16, 16, 0);
     }
+    assert(s->vex_l <= 1); /* TODO_CG: AVX512 size? */
 }
 
 static void gen_PCMPISTRI(DisasContext *s, CPUX86State *env, X86DecodedInsn *decode)
@@ -1418,10 +1425,10 @@ static void gen_PCMPISTRM(DisasContext *s, CPUX86State *env, X86DecodedInsn *dec
     gen_helper_pcmpistrm_xmm(cpu_env, OP_PTR1, OP_PTR2, imm);
     set_cc_op(s, CC_OP_EFLAGS);
     if ((s->prefix & (PREFIX_VEX|PREFIX_EVEX)) && !s->vex_l) {
-        assert(s->vex_l == 1); /* TODO_CG: AVX512 size? */
         tcg_gen_gvec_dup_imm(MO_64, offsetof(CPUX86State, xmm_regs[0].ZMM_X(1)),
                              16, 16, 0);
     }
+    assert(s->vex_l <= 1); /* TODO_CG: AVX512 size? */
 }
 
 static void gen_PDEP(DisasContext *s, CPUX86State *env, X86DecodedInsn *decode)

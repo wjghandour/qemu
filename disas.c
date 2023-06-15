@@ -241,6 +241,31 @@ void target_disas(FILE *out, CPUState *cpu, target_ulong code,
     }
 }
 
+/* Disassemble the requested number of instructions... (debugging).  */
+void target_disas_one(FILE *out, CPUState *cpu, target_ulong code)
+{
+    CPUDebug s;
+    target_ulong size = 4096; /* Arbitrary large for containing an instruction. */
+
+    initialize_debug_target(&s, cpu);
+    s.info.fprintf_func = fprintf;
+    s.info.stream = out;
+    s.info.buffer_vma = code;
+    s.info.buffer_length = size;
+
+    if (s.info.cap_arch >= 0 && cap_disas_monitor(&s.info, code, 1)) {
+        return;
+    }
+
+    if (s.info.print_insn == NULL) {
+        s.info.print_insn = print_insn_od_target;
+    }
+
+    fprintf(out, "0x" TARGET_FMT_lx ":  ", code);
+    s.info.print_insn(code, &s.info);
+    fprintf(out, "\n");
+}
+
 static int G_GNUC_PRINTF(2, 3)
 gstring_printf(FILE *stream, const char *fmt, ...)
 {

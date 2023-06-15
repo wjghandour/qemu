@@ -10,6 +10,7 @@
 void disas(FILE *out, const void *code, unsigned long size);
 void target_disas(FILE *out, CPUState *cpu, target_ulong code,
                   target_ulong size);
+void target_disas_one(FILE *out, CPUState *cpu, target_ulong code);
 
 void monitor_disas(Monitor *mon, CPUState *cpu,
                    target_ulong pc, int nb_insn, int is_physical);
