@@ -316,10 +316,17 @@ static void gen_writeback(DisasContext *s, X86DecodedInsn *decode, int opn, TCGv
     case X86_OP_MMX:
         break;
     case X86_OP_SSE:
-        if (!op->has_ea && (s->prefix & PREFIX_VEX) && op->ot <= MO_128) {
-            tcg_gen_gvec_dup_imm(MO_64,
-                                 offsetof(CPUX86State, xmm_regs[op->n].ZMM_X(1)),
-                                 16, 16, 0);
+        if (!op->has_ea && (s->prefix & (PREFIX_VEX|PREFIX_EVEX))) {
+            if (op->ot <= MO_128) {
+                tcg_gen_gvec_dup_imm(MO_64,
+                                     offsetof(CPUX86State, xmm_regs[op->n].ZMM_X(1)),
+                                     16, 16, 0);
+            }
+            if (op->ot <= MO_256) {
+                tcg_gen_gvec_dup_imm(MO_64,
+                                     offsetof(CPUX86State, xmm_regs[op->n].ZMM_Y(1)),
+                                     32, 32, 0);
+            }
         }
         break;
     case X86_OP_CR:
