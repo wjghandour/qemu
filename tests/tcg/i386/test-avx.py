@@ -222,17 +222,17 @@ class ArgK():
 class ArgKMask():
     isxmm = False
     ismem = False
-    def __init__(self, default=True, zero=False):
-        self.zero = zero
-        self.default = default
+    def __init__(self, optional=True, has_z=False):
+        self.has_z = has_z
+        self.optional = optional
 
     def regstr(self, n, zero=0):
         if n == 0:
-            assert self.default
+            assert self.optional
             return "" # k0 for no write mask
         z = ""
         if zero:
-            assert self.zero
+            assert self.has_z
             z = "{z}"
         return "{k%s}%s" % (n % 8, z)
 
@@ -296,16 +296,17 @@ def ArgGenerator(arg, op):
         return ArgK(reg_mod=reg_mod)
     elif arg[:2] == '{k':
         if arg == '{k1-k7}':
-            return ArgKMask(default=False, zero=False)
+            return ArgKMask(optional=False, has_z=False)
         elif arg[-3:] == '{z}':
-            return ArgKMask(zero=True)
+            return ArgKMask(has_z=True)
         else:
-            return ArgKMask(zero=False)
+            return ArgKMask(has_z=False)
     else:
         raise Exception("Unrecognised arg: %s", arg)
 
 class InsnGenerator:
-    def __init__(self, op, args, accesses):
+    def __init__(self, op, args, accesses, opts):
+        self.opts = opts
         self.op = op
         if op[-2:] in ["PH", "PS", "PD", "SS", "SD"]:
             if op[-1] == 'H':
@@ -331,8 +332,12 @@ class InsnGenerator:
             raise Exception("Bad arg %s: %s" % (op, e))
 
     def gen(self):
-        regs = (10, 11, 12)
+        if self.opts.avx512:
+            regs = (18, 11, 12) # Test with a high register
+        else:
+            regs = (10, 11, 12)
         dest = 9
+        kregs = (1,) # non 0 kregs to test
 
         kmask = -1, None
         for n, arg in enumerate(self.args):
@@ -427,9 +432,13 @@ class InsnGenerator:
 
         args_expanded = []
         for regv in regset:
-            kregs = [0] if kmask[0] == -1 else ([1] if kmask[1].default == False else [0, 1])
-            for kreg in kregs:
-                zeroes = [0] if kreg == 0 or kmask[0] - 1 == memarg and regv[memarg] == -1 else ([0] if kmask[1].zero == False else [0, 1])
+            kargs = []
+            if kmask[0] == -1 or kmask[1].optional:
+                kargs.append(0)
+            if kmask[0] != -1 and not self.opts.no_mask:
+                kargs.extend(kregs)
+            for kreg in kargs:
+                zeroes = [False] if kreg == 0 or kmask[1].has_z == False or kmask[0] - 1 == memarg and regv[memarg] == -1 else [False, True]
                 for zero in zeroes:
                     argstr = []
                     for i in range(nreg):
@@ -445,7 +454,8 @@ class InsnGenerator:
             else:
                 for immval in immarg.vals():
                     yield self.op + ' ' + ','.join(argstr) + ',' + str(immval)
-                    break
+                    if self.opts.no_full_imm:
+                        break
 
 def split0(s):
     if s == '':
@@ -459,6 +469,8 @@ def main():
 
     parser = argparse.ArgumentParser(description="AVX/AVX512 table generator")
     parser.add_argument("--avx512", action='store_true', help="Generate AVX512 subset instread of avx")
+    parser.add_argument("--no-mask", action='store_true', help="Do not generate mask predicate operands")
+    parser.add_argument("--no-full-imm", action='store_true', help="Do not generate all immediates combinations")
     parser.add_argument("--debug", action='store_true', help="Debug mode")
     parser.add_argument("CSV", help="input csv file")
     parser.add_argument("OUT", help="output header file")
@@ -483,7 +495,7 @@ def main():
             if cpuid in subsets:
                 try:
                     logger.debug("Insn: %s" % (insn,))
-                    g = InsnGenerator(insn[0], insn[1:], accesses)
+                    g = InsnGenerator(insn[0], insn[1:], accesses, args)
                     for insn in g.gen():
                         outf.write('TEST(%d, "%s", %s)\n' % (n, insn, g.optype))
                         n += 1

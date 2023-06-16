@@ -95,7 +95,8 @@ test-avx.h: test-avx.py x86.csv
 	$(PYTHON) $(I386_SRC)/test-avx.py $(I386_SRC)/x86.csv $@
 
 test-avx512.h: test-avx.py x86.csv
-	$(PYTHON) $(I386_SRC)/test-avx.py --avx512 $(I386_SRC)/x86.csv $@
+	# For now disable full immediate and mask predicates
+	$(PYTHON) $(I386_SRC)/test-avx.py --avx512 --no-full-imm --no-mask $(I386_SRC)/x86.csv $@
 
 test-3dnow: CFLAGS += -masm=intel -O -I.
 run-test-3dnow: QEMU_OPTS += -cpu max
