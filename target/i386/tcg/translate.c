@@ -3288,27 +3288,13 @@ static bool disas_insn(DisasContext *s, CPUState *cpu)
 
     case 0x62: /* EVEX prefix Byte 0 (62h) */
         if (CODE32(s) && !VM86(s)) {
-            int evex2, evex3;
+            int evex2;
             evex2 = x86_ldub_code(env, s);
             s->pc--; /* rewind the advance_pc() x86_ldub_code() did */
 
             if (!CODE64(s) && (evex2 & 0xc0) != 0xc0) {
-                // bound is invalid in 64-bit Mode
-                /* In 32-bit mode, bits [7:6] must be 11b,  NEED TO VERIFY THIS LINE, I READ inverted in https://stackoverflow.com/questions/48853237/how-does-the-instruction-decoder-differentiate-between-evex-prefix-and-bound-opc
-                   otherwise the instruction is bound.  */
+                /* Ref Vol2a Table 2-38. BOUND instruction in non-64bit mode if bits P[7:6] != 11b */
                 break;
-            }
-            if (!CODE64(s) && (evex2 & 0x0c) != 0x00) {  // is there a need for code64?
-                //Reserved bits: P[3:2] must be 0, otherwise #UD.
-                goto illegal_op;
-            }
-            evex2 = x86_ldub_code(env, s);
-            evex3 = x86_ldub_code(env, s);
-            s->pc -= 2;
-            if (!CODE64(s) && (evex3 & 0x04) != 0x04) {  // is there a need for code64?
-                //Fixed-value bit: P[10] must be 1, otherwise #UD.
-                //THIS NEEDS TO BE CHECKED IF WE NEED TO DECREMENT TWICE OR ONLY ONCE
-                goto illegal_op;
             }
             disas_insn_new(s, cpu, b);
             return true;

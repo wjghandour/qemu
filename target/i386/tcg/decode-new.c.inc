@@ -2042,7 +2042,7 @@ static void disas_insn_new(DisasContext *s, CPUState *cpu, int b)
             goto illegal_op;
         }
 
-        /* Vol2a Table 2-30: P[3:2] must be 0. */
+        /* Vol2a Table 2-30/2-38: P[3:2] must be 0. */
         if ((evex2 & 0x0c) != 0) {
             goto illegal_op;
         }
@@ -2050,8 +2050,8 @@ static void disas_insn_new(DisasContext *s, CPUState *cpu, int b)
         // Based on section Vol2a 2.3.5 The VEX Prefix
         // Compressed legacy prefix/escape bytes: P[1:0] is identical to the lowest 2 bits of VEX.mmmmm
         switch (evex2 & 0x03) {
-        case 0x00:   /* Reserved for future use.  */
-            goto unknown_op;
+        case 0x00:   /* Illegal, #UD Ref Table 2-38.  */
+            goto illegal_op;
         case 0x01: /* Implied 0f leading opcode bytes.  */
             decode_func = decode_0F_AVX512;
             break;
@@ -2071,7 +2071,7 @@ static void disas_insn_new(DisasContext *s, CPUState *cpu, int b)
 
         evex3 = x86_ldub_code(env, s);
 
-        /* Vol2a Table 2-30: P[10] must be 1. */
+        /* Vol2a Table 2-30/2-38: P[10] must be 1. */
         if ((evex3 & 0x04) != 0x04) {
             goto illegal_op;
         }
