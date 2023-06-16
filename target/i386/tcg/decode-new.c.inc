@@ -1017,7 +1017,7 @@ static void decode_0F38_AVX512(DisasContext *s, CPUX86State *env, X86OpEntry *en
 {
     static const X86OpEntry opcodes_0F38_00toEF_AVX512[240] = {
         [0x18] = X86_OP_ENTRY3(E_VBROADCASTSS, V,x,  None,None, W,d, evex6 cpuid(AVX512F_VL) p_66 etupl(TUPLE1_SCALAR)),
-        [0x19] = X86_OP_ENTRY3(E_VBROADCASTSD, V,qq, None,None, W,q, evex6 cpuid(AVX512F_VL) p_66 etupl(TUPLE1_SCALAR)),
+        [0x19] = X86_OP_ENTRY3(E_VBROADCASTSD, V,x,  None,None, W,q, evex6 cpuid(AVX512F_VL) p_66 etupl(TUPLE1_SCALAR)),
         [0x58] = X86_OP_ENTRY3(E_VPBROADCASTD, V,x,  None,None, W,d, evex6 cpuid(AVX512F_VL) p_66 etupl(TUPLE1_SCALAR)),
         [0x59] = X86_OP_ENTRY3(E_VPBROADCASTQ, V,x,  None,None, W,q, evex6 cpuid(AVX512F_VL) p_66 etupl(TUPLE1_SCALAR)),
         [0x98] = X86_OP_ENTRY3(E_VFMADD132Px,  V,x,  H,x, W,x,  evex2 cpuid(AVX512F_VL) p_66 etupl(FULL)),
@@ -1186,6 +1186,7 @@ static bool decode_op_size(DisasContext *s, X86OpEntry *e, X86OpSize size, MemOp
         return true;
 
     case X86_SIZE_dq: /* SSE/AVX 128-bit */
+        assert(!(s->prefix & PREFIX_EVEX)); /* Do not use for AVX512 */
         if (e->special == X86_SPECIAL_MMX &&
             !(s->prefix & (PREFIX_DATA | PREFIX_REPZ | PREFIX_REPNZ))) {
             *ot = MO_64;
@@ -1197,12 +1198,12 @@ static bool decode_op_size(DisasContext *s, X86OpEntry *e, X86OpSize size, MemOp
         *ot = MO_128;
         return true;
 
-    case X86_SIZE_qq: /* AVX 256/512-bit */
+    case X86_SIZE_qq: /* AVX 256-bit */
+        assert(!(s->prefix & PREFIX_EVEX)); /* Do not use for AVX512 */
         if (!s->vex_l) {
             return false;
         }
         *ot = MO_256;
-        assert(s->vex_l != 2); /* TODO_CG: implement for 512 bits */
         return true;
 
     case X86_SIZE_x:  /* 128/256/512-bit, based on operand size */
@@ -1218,8 +1219,7 @@ static bool decode_op_size(DisasContext *s, X86OpEntry *e, X86OpSize size, MemOp
         return true;
 
     case X86_SIZE_ph: /* SSE/AVX packed half precision */
-        *ot = get_vex_evex_l(s, 0, MO_128, MO_64);
-        assert(*ot != 0); /* TODO_CG: implement VCVTPH2PS/VCVTPS2PH for EVEX */
+        *ot = get_vex_evex_l(s, MO_256, MO_128, MO_64);
         return true;
 
     case X86_SIZE_d64:  /* Default to 64-bit in 64-bit mode */
@@ -1575,7 +1575,7 @@ static bool has_cpuid_feature(DisasContext *s, X86CPUIDFeature cpuid)
     case X86_FEAT_AVX512F_VL:
         /* AVX512_CG: assume that vex_l specifies the vector size
            and check for AVX512_VL when size is 128/256 bits. */
-        if (s->vex_l >= 1 && s->vex_l <= 2 &&
+        if (s->vex_l <= 1 &&
             !(s->cpuid_7_0_ebx_features & CPUID_7_0_EBX_AVX512VL))
             return false;
         /* fall through */
@@ -1843,7 +1843,6 @@ static void evex_adjust_ea_disp8N(DisasContext *s, X86DecodedInsn *decode)
         }
         /* fall through */
     case X86_EVEX_TUPLE_FULL_MEM:
-        assert(s->vex_l >= 1);
         scale = get_vex_evex_l(s, 4, 2, 1) * 16;
         if (tuple == X86_EVEX_TUPLE_HALF ||
             tuple == X86_EVEX_TUPLE_HALF_MEM) {
@@ -1883,12 +1882,7 @@ static void evex_adjust_ea_disp8N(DisasContext *s, X86DecodedInsn *decode)
         scale = 16;
         break;
     case X86_EVEX_TUPLE_MOVDDUP:
-        switch(s->vex_l) {
-        case 1: scale = 8; break;
-        case 2: scale = 32; break;
-        case 3: scale = 64; break;
-        default: scale = -1; break;
-        }
+        scale = get_vex_evex_l(s, 64, 32, 8);
         break;
     default: scale = -1; break;
     }
