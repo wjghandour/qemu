@@ -109,6 +109,6 @@ test-avx: CFLAGS += -mavx -masm=intel -O -I.
 run-test-avx: QEMU_OPTS += -cpu max
 test-avx: test-avx.h
 
-test-avx512: CFLAGS += -mavx512f -masm=intel -O -I.
+test-avx512: CFLAGS += -mavx512f -masm=intel -O -I. -DTRY_RECOVER_TRAP
 run-test-avx512: QEMU_OPTS += -cpu max,avx512
 test-avx512: test-avx512.h

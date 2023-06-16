@@ -94,12 +94,59 @@ static void compare_state(const reg_state *a, const reg_state *b)
     }
 }
 
+static void __attribute__((naked)) test_none(void)
+{
+    asm volatile("ret");
+}
+
+/* Define this when in debug mode such that illegal instructions are reported and do not stop tests. */
+#ifdef TRY_RECOVER_TRAP
+#define __USE_GNU
+#include <signal.h>
+#include <ucontext.h>
+
+static int illegal;
+
+static void sighandler_illegal(int signo, siginfo_t *si, void *data) {
+    ucontext_t *uc = (ucontext_t *)data;
+    illegal += 1;
+    /* Will execute test_none which simply returns, this will get back to the caller of the test function
+       if the ILLEGAL op is generated inside the test function.
+       Note that TRY_RECOVER_TRAP should be disabled when debugging the test harness itself
+       as the above condition may not be met (for instannce an ILLEGAL op in the startup or when initializing registers).
+    */
+    uc->uc_mcontext.gregs[REG_RIP] = (greg_t)test_none;
+    setcontext(uc);
+}
+static void init_trap(void) {
+    struct sigaction sa;
+    illegal = 0;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_flags = SA_RESTART | SA_ONSTACK | SA_SIGINFO;
+    sa.sa_sigaction = sighandler_illegal;
+    sigaction(SIGILL, &sa, NULL);
+}
+static void reset_trap(void) {
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_handler = SIG_DFL;
+    sigaction(SIGILL, &sa, NULL);
+}
+static int has_trapped(void) {
+    return illegal != 0;
+}
+#else
+#define init_trap() ((void)0)
+#define reset_trap() ((void)0)
+#define has_trapped() (0)
+#endif
+
 #define LOADMM(r, o) "movq " #r ", " #o "[%0]\n\t"
 #define LOADZMM(r, o) "vmovaps " #r ", " #o "[%0]\n\t"
 #define STOREMM(r, o) "movq " #o "[%1], " #r "\n\t"
 #define STOREZMM(r, o) "vmovaps " #o "[%1], " #r "\n\t"
 /* Values below are offsets of each MM reg in the reg_state type. */
-#define MMREG(F) \
+#define MMREGS(F) \
     F(mm0, 0x00) \
     F(mm1, 0x08) \
     F(mm2, 0x10) \
@@ -114,7 +161,7 @@ static void compare_state(const reg_state *a, const reg_state *b)
         "zmm16", "zmm17", "zmm18","zmm19", "zmm20", "zmm21", "zmm22","zmm23",   \
         "zmm24", "zmm25", "zmm26","zmm27", "zmm28", "zmm29", "zmm30","zmm31"
 /* Values below are offsets of each ZMM reg in the reg_state type. */
-#define ZMMREG(F) \
+#define ZMMREGS(F) \
     F(zmm0,  0x040) \
     F(zmm1,  0x080) \
     F(zmm2,  0x0c0) \
@@ -153,7 +200,7 @@ static void compare_state(const reg_state *a, const reg_state *b)
 /* Values below are offsets of each reg in the reg_state type. */
 /* Note that RAX (reg index 0) and RSP/RBP (reg indexes 6/7)
    are handledd separately below. */
-#define REG(F) \
+#define REGS(F) \
     F(rbx, 0x848) \
     F(rcx, 0x850) \
     F(rdx, 0x858) \
@@ -167,11 +214,11 @@ static void compare_state(const reg_state *a, const reg_state *b)
     F(r13, 0x8a8) \
     F(r14, 0x8b0) \
     F(r15, 0x8b8)
-#define REG_RAX(F) \
+#define REGRAX(F) \
     F(0x840)
-#define REG_RSP(F) \
+#define REGRSP(F) \
     F(0x870)
-#define REG_RBP(F) \
+#define REGRBP(F) \
     F(0x878)
 #define LOADRCX(o) "mov rcx, " #o "[rax]\n\t"
 #define LOADRAX(o) "mov rax, " #o "[rax]\n\t"
@@ -180,16 +227,18 @@ static void compare_state(const reg_state *a, const reg_state *b)
 #define FLAGS(F) \
     F(0x8c0)
 
-static void run_test(const TestDef *t)
+static int run_test(const TestDef *t)
 {
+    int error = 0;
     reg_state result;
     reg_state *init = t->init;
     memcpy(init->mem, init->mem0, sizeof(init->mem));
     printf("%5d %s\n", t->n, t->s);
     fflush(stdout);
+    init_trap();
     asm volatile(
-            MMREG(LOADMM)
-            ZMMREG(LOADZMM)
+            MMREGS(LOADMM)
+            ZMMREGS(LOADZMM)
             "sub rsp, 128\n\t"
             "push rax\n\t"
             "push rbx\n\t"
@@ -207,17 +256,17 @@ static void run_test(const TestDef *t)
             "or rbx, rcx\n\t"
             "push rbx\n\t"
             "popf\n\t"
-            REG(LOADREG)
-            REG_RAX(LOADRAX)
+            REGS(LOADREG)
+            REGRAX(LOADRAX)
             "call [rsp]\n\t"
             "mov [rsp], rax\n\t"
             "mov rax, 8[rsp]\n\t"
-            REG(STOREREG)
+            REGS(STOREREG)
             "mov rbx, [rsp]\n\t"
-            REG_RAX(STORERBX)
+            REGRAX(STORERBX)
             "mov rbx, 0\n\t"
-            REG_RSP(STORERBX)
-            REG_RBP(STORERBX)
+            REGRSP(STORERBX)
+            REGRBP(STORERBX)
             "pushf\n\t"
             "pop rbx\n\t"
             "and rbx, 0xff\n\t"
@@ -228,8 +277,8 @@ static void run_test(const TestDef *t)
             "pop rbx\n\t"
             "pop rax\n\t"
             "add rsp, 128\n\t"
-            MMREG(STOREMM)
-            ZMMREG(STOREZMM)
+            MMREGS(STOREMM)
+            ZMMREGS(STOREZMM)
             : : "r"(init), "r"(&result), "r"(t->fn)
             : "memory", "cc",
             "rsi", "rdi",
@@ -237,8 +286,15 @@ static void run_test(const TestDef *t)
             "mm0", "mm1", "mm2", "mm3", "mm4", "mm5", "mm6", "mm7",
             ALL_ZMM
             );
-    compare_state(init, &result);
+    reset_trap();
+    if (has_trapped()) {
+        error = 1;
+        printf("TRAP: ILLEGAL\n");
+    } else {
+        compare_state(init, &result);
+    }
     fflush(stdout);
+    return error;
 }
 
 #define TEST(n, cmd, type) \
@@ -257,22 +313,18 @@ static const TestDef test_table[] = {
 };
 #undef TEST
 
-
-static void __attribute__((naked)) test_nop(void)
-{
-    asm volatile("nop");
-    asm volatile("ret");
-}
-static const TestDef testdef_nop = {
-    -1, test_nop, "nop", &initI
+static const TestDef testdef_none = {
+    -1, test_none, "none", &initI
 };
 
-static void run_all(void)
+static int run_all(void)
 {
+    int errors = 0;
     const TestDef *t;
     for (t = test_table; t->fn; t++) {
-        run_test(t);
+        errors += run_test(t);
     }
+    return errors;
 }
 
 #define ARRAY_LEN(x) (sizeof(x) / sizeof(x[0]))
@@ -385,6 +437,7 @@ static void init_all(reg_state *s)
 int main(int argc, char *argv[])
 {
     int i;
+    int errors = 0, tests = 0;;
 
     init_all(&initI);
     init_intreg(&initI.zmm[10]);
@@ -428,25 +481,35 @@ int main(int argc, char *argv[])
     if (argc > 1) {
         int n = atoi(argv[1]);
         if (n == -1) {
-            run_test(&testdef_nop);
+            tests += 1;
+            errors += run_test(&testdef_none);
         } else {
-            int num = 0;
             const TestDef *ptr = &test_table[0];
             while (ptr->n !=-1) {
                 if (ptr->n == n) {
-                    num++;
-                    run_test(ptr);
+                    tests += 1;
+                    errors += run_test(ptr);
                 }
                 ptr++;
             }
-            if (num == 0) {
+            if (tests == 0) {
                 fprintf(stderr, "ERROR: no test with id: %d\n", n);
                 exit(1);
             }
         }
     } else {
-        run_test(&testdef_nop);
-        run_all();
+        const TestDef *t;
+        tests += 1;
+        errors += run_test(&testdef_none);
+        for (t = test_table; t->fn; t++) {
+            tests += 1;
+        }
+        errors += run_all();
+    }
+
+    if (errors > 0) {
+        fprintf(stderr, "FAILED: %d/%d tests failed\n", errors, tests);
+        exit(1);
     }
     return 0;
 }
