@@ -375,11 +375,14 @@ class InsnGenerator:
             if memarg >= 0:
                 raise Exception("vsib with memory: %s" % self.op)
         elif nreg == 1:
+            regset = [(dest,)]
             regset = [(regs[0],)]
             if memarg == 0:
                 regset += [(-1,)]
         elif nreg == 2:
             regset = [
+                (dest, regs[1]),
+                (dest, regs[0]),
                 (regs[0], regs[1]),
                 (regs[0], regs[0]),
                 ]
