@@ -38,18 +38,18 @@ reg_state initF64;
 
 static void dump_zmm(const char *name, int n, const vxdi *r, int ff)
 {
-    printf("%s%d = %016lx %016lx %016lx %016lx %016lx %016lx %016lx %016lx\n",
+    printf("    %s%d: 8x64 %016lx %016lx %016lx %016lx %016lx %016lx %016lx %016lx\n",
            name, n, r->q7, r->q6, r->q5, r->q4, r->q3, r->q2, r->q1, r->q0);
     if (ff == 64) {
         double v[N_ZMM_F64];
         memcpy(v, r, sizeof(v));
-        printf("        %16g %16g %16g %16g %16g %16g %16g %16g\n",
-               v[7], v[6], v[5], v[4], v[3], v[2], v[1], v[0]);
+        printf("    %s%df64: 8xf64 %16g %16g %16g %16g %16g %16g %16g %16g\n",
+               name, n, v[7], v[6], v[5], v[4], v[3], v[2], v[1], v[0]);
     } else if (ff == 32) {
         float v[N_ZMM_F32];
         memcpy(v, r, sizeof(v));
-        printf(" %8g %8g %8g %8g %8g %8g %8g %8g %8g %8g %8g %8g %8g %8g %8g %8g\n",
-               v[15], v[14], v[13], v[12], v[11], v[10], v[9], v[8],
+        printf("    %s%df32: 16xf32 %8g %8g %8g %8g %8g %8g %8g %8g %8g %8g %8g %8g %8g %8g %8g %8g\n",
+               name, n, v[15], v[14], v[13], v[12], v[11], v[10], v[9], v[8],
                v[7], v[6], v[5], v[4], v[3], v[2], v[1], v[0]);
     }
 }
@@ -71,12 +71,12 @@ static void compare_state(const reg_state *a, const reg_state *b)
     int i;
     for (i = 0; i < 8; i++) {
         if (a->mm[i] != b->mm[i]) {
-            printf("MM%d = %016lx\n", i, b->mm[i]);
+            printf("    MM%d: 1x64 %016lx\n", i, b->mm[i]);
         }
     }
     for (i = 0; i < 16; i++) {
         if (a->r[i] != b->r[i]) {
-            printf("r%d = %016lx\n", i, b->r[i]);
+            printf("    r%d: 1x64 %016lx\n", i, b->r[i]);
         }
     }
     for (i = 0; i < N_ZMM; i++) {
@@ -90,7 +90,7 @@ static void compare_state(const reg_state *a, const reg_state *b)
         }
     }
     if (a->flags != b->flags) {
-        printf("FLAGS = %016lx\n", b->flags);
+        printf("    FLAGS: 1x64 %016lx\n", b->flags);
     }
 }
 
@@ -233,7 +233,7 @@ static int run_test(const TestDef *t)
     reg_state result;
     reg_state *init = t->init;
     memcpy(init->mem, init->mem0, sizeof(init->mem));
-    printf("%5d %s\n", t->n, t->s);
+    printf("  %d %s:\n", t->n, t->s);
     fflush(stdout);
     init_trap();
     asm volatile(
@@ -289,7 +289,7 @@ static int run_test(const TestDef *t)
     reset_trap();
     if (has_trapped()) {
         error = 1;
-        printf("TRAP: ILLEGAL\n");
+        printf("    TRAP: ILLEGAL\n");
     } else {
         compare_state(init, &result);
     }
@@ -439,45 +439,47 @@ int main(int argc, char *argv[])
     int i;
     int errors = 0, tests = 0;;
 
+    printf("INIT:\n");
     init_all(&initI);
-    init_intreg(&initI.zmm[10]);
+    init_intreg(&initI.zmm[18]);
     init_intreg(&initI.zmm[11]);
     init_intreg(&initI.zmm[12]);
     init_intreg(&initI.mem0[1]);
-    printf("Int:\n");
+    printf("  INT:\n");
     dump_regs(&initI);
 
     init_all(&initF16);
-    init_f16reg(&initF16.zmm[10]);
+    init_f16reg(&initF16.zmm[18]);
     init_f16reg(&initF16.zmm[11]);
     init_f16reg(&initF16.zmm[12]);
     init_f16reg(&initF16.mem0[1]);
     initF16.ff = 16;
-    printf("F16:\n");
+    printf("  F16:\n");
     dump_regs(&initF16);
 
     init_all(&initF32);
-    init_f32reg(&initF32.zmm[10]);
+    init_f32reg(&initF32.zmm[18]);
     init_f32reg(&initF32.zmm[11]);
     init_f32reg(&initF32.zmm[12]);
     init_f32reg(&initF32.mem0[1]);
     initF32.ff = 32;
-    printf("F32:\n");
+    printf("  F32:\n");
     dump_regs(&initF32);
 
     init_all(&initF64);
-    init_f64reg(&initF64.zmm[10]);
+    init_f64reg(&initF64.zmm[18]);
     init_f64reg(&initF64.zmm[11]);
     init_f64reg(&initF64.zmm[12]);
     init_f64reg(&initF64.mem0[1]);
     initF64.ff = 64;
-    printf("F64:\n");
+    printf("  F64:\n");
     dump_regs(&initF64);
 
     for (i = 0; i < ARRAY_LEN(gather_mem); i++) {
         init_intreg(&gather_mem[i]);
     }
 
+    printf("TESTS:\n");
     if (argc > 1) {
         int n = atoi(argv[1]);
         if (n == -1) {
