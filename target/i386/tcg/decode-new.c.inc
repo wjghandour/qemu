@@ -1061,9 +1061,34 @@ static void decode_0F7F_AVX512(DisasContext *s, CPUX86State *env, X86OpEntry *en
     *entry = *decode_by_prefix(s, opcodes_0F7F_AVX512);
 }
 
+static void decode_0F10_AVX512(DisasContext *s, CPUX86State *env, X86OpEntry *entry, uint8_t *b)
+{
+    static const X86OpEntry opcodes_0F10_AVX512[4] = {
+        X86_OP_ENTRY3(E_VMOVUPS,       V,x, None,None, W,x, evex4_nb cpuid(AVX512F_VL) etupl(FULL_MEM) /*ud_vvvv*/),
+        {},
+        {},
+        {}
+    };
+    *entry = *decode_by_prefix(s, opcodes_0F10_AVX512);
+}
+
+static void decode_0F11_AVX512(DisasContext *s, CPUX86State *env, X86OpEntry *entry, uint8_t *b)
+{
+    static const X86OpEntry opcodes_0F11_AVX512[4] = {
+        X86_OP_ENTRY3(E_VMOVUPS, W,x, None,None, V,x, evex4_nb cpuid(AVX512F_VL) etupl(FULL_MEM) /*ud_vvvv*/),
+        {},
+        {},
+        {}
+    };
+
+    *entry = *decode_by_prefix(s, opcodes_0F11_AVX512);
+}
+
 static void decode_0F_AVX512(DisasContext *s, CPUX86State *env, X86OpEntry *entry, uint8_t *b)
 {
     static const X86OpEntry opcodes_0F_AVX512[256] = {
+        [0x10] = X86_OP_GROUP0(0F10_AVX512),
+        [0x11] = X86_OP_GROUP0(0F11_AVX512),
         [0x28] = X86_OP_ENTRY3(E_VMOVAPS,      V,x,  None,None, W,x, evex1 p_00_66 cpuid(AVX512F_VL) etupl(FULL_MEM) /*ud_vvvv*/),
         [0x29] = X86_OP_ENTRY3(E_VMOVAPS,      W,x,  None,None, V,x, evex1 p_00_66 cpuid(AVX512F_VL) etupl(FULL_MEM) /*ud_vvvv*/),
         [0x38] = X86_OP_GROUP0(0F38_AVX512),

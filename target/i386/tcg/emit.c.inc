@@ -1346,6 +1346,12 @@ static void gen_E_VMOVAPS(DisasContext *s, CPUX86State *env, X86DecodedInsn *dec
     gen_store_sse(s, decode, decode->op[2].offset);
 }
 
+
+static void gen_E_VMOVUPS(DisasContext *s, CPUX86State *env, X86DecodedInsn *decode)
+{
+    gen_store_sse(s, decode, decode->op[2].offset);
+}
+
 static void gen_MOVMSK(DisasContext *s, CPUX86State *env, X86DecodedInsn *decode)
 {
     typeof(gen_helper_movmskps_ymm) *ps, *pd, *fn;    
