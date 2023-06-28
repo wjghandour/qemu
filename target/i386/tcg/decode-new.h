@@ -32,6 +32,8 @@ typedef enum X86OpType {
     X86_TYPE_H, /* For AVX/AVX512, VEX.vvvv selects an XMM/YMM/ZMM register. AVX512_CG: EVEX.v'|EVEX.vvvv */
     X86_TYPE_I, /* Immediate */
     X86_TYPE_J, /* Relative offset for a jump */
+    X86_TYPE_K, /* AVX512_WG: one of 8 opmask registers (k0–k7). The opmask registers are normally 16 bits wide, but can be up to 64 bits with the AVX-512BW extension.  */
+    X86_TYPE_KM, /* AVX512_WG: memory (m8, m16, m32, m64) or opmak register */
     X86_TYPE_L, /* The upper 4 bits of the immediate select a 128-bit register */
     X86_TYPE_M, /* modrm byte selects a memory operand */
     X86_TYPE_N, /* R/M in the modrm byte selects an MMX register */
@@ -76,6 +78,7 @@ typedef enum X86OpSize {
     X86_SIZE_b,  /* byte */
     X86_SIZE_d,  /* 32-bit */
     X86_SIZE_dq, /* SSE/AVX 128-bit */
+    X86_SIZE_m, /* AVX512_WG: 8/16/32/64-bit, based on operand size */
     X86_SIZE_p,  /* Far pointer */
     X86_SIZE_pd, /* SSE/AVX packed double precision */
     X86_SIZE_pi, /* MMX */
@@ -110,6 +113,7 @@ typedef enum X86CPUIDFeature {
     X86_FEAT_AVX2,
     X86_FEAT_AVX512F,     // AVX512_CG: AVX512F
     X86_FEAT_AVX512F_VL,  // AVX512_CG: AVX512F + AVX512_VL for XMM/YMM
+    X86_FEAT_AVX512F_DQ_BW, // AVX512_WG: AVX512F + AVX512DQ + AVX512BW
     X86_FEAT_BMI1,
     X86_FEAT_BMI2,
     X86_FEAT_F16C,

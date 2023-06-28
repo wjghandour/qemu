@@ -113,6 +113,9 @@
 #define vex11 .vex_class = 11,
 #define vex12 .vex_class = 12,
 #define vex13 .vex_class = 13,
+#define vex20 .vex_class = 20, // Added for TYPE K20 Exception Definition (VEX-Encoded OpMask Instructions w/o Memory Arg)
+#define vex21 .vex_class = 21, // Added for type k21 
+
 
 #define avx2_256 .vex_special = X86_VEX_AVX2_256,
 
@@ -1095,6 +1098,22 @@ static void decode_0F_AVX512(DisasContext *s, CPUX86State *env, X86OpEntry *entr
         [0x3a] = X86_OP_GROUP0(0F3A_AVX512),
         [0x6f] = X86_OP_GROUP0(0F6F_AVX512),
         [0x7f] = X86_OP_GROUP0(0F7F_AVX512),
+	//the following isntructions are VEX instead of EVEX, exceptions need to be handled.
+	//add the cpuid mentioned below
+	//shall we handle all instructions of the same opcode together: e.g the four instructions with 90 together
+	//is etupl needed here ?
+        [0x90] = X86_OP_ENTRY3(KMOV_90,      K,m,  None,None, KM,m, vex21 p_00_66 cpuid(AVX512F_DQ_BW)  ),
+	// Instructions with RM or MR operand encoding, see Table 2-64, “TYPE K21 Exception Definition (VEX-Encoded
+//OpMask Instructions Addressing Memory).”
+	[0x91] = X86_OP_ENTRY3(KMOV_91,      M,m,  None,None, K,m, vex21 p_00_66 cpuid(AVX512F_DQ_BW)  ),
+	// Instructions with RM or MR operand encoding, see Table 2-64, “TYPE K21 Exception Definition (VEX-Encoded
+//OpMask Instructions Addressing Memory).”
+        [0x92] = X86_OP_ENTRY3(KMOV_92,      K,m,  None,None, G,m, vex20 p_00_66 cpuid(AVX512F_DQ_BW)  ),
+	// Instructions with RR operand encoding, see Table 2-63, “TYPE K20 Exception Definition (VEX-Encoded OpMask
+//Instructions w/o Memory Arg).”
+        [0x93] = X86_OP_ENTRY3(KMOV_93,      G,m,  None,None, K,m, vex20 p_00_66 cpuid(AVX512F_DQ_BW)  ),
+	// Instructions with RR operand encoding, see Table 2-63, “TYPE K20 Exception Definition (VEX-Encoded OpMask
+//Instructions w/o Memory Arg).”
     };
     *b = x86_ldub_code(env, s);
     *entry = opcodes_0F_AVX512[*b];
@@ -1113,6 +1132,9 @@ static void decode_0F_AVX512(DisasContext *s, CPUX86State *env, X86OpEntry *entr
 #undef vex11
 #undef vex12
 #undef vex13
+#undef vex20
+#undef vex21
+
 
 // AVX512_CG
 #undef evex1
@@ -1447,6 +1469,12 @@ static bool decode_op(DisasContext *s, CPUX86State *env, X86DecodedInsn *decode,
         op->n = ((get_modrm(s, env) >> 3) & 7) | REX_R(s) | REX_EVEX_RP(s);
         op->n = ((get_modrm(s, env) >> 3) & 7) | REX_R(s) | REX_EVEX_RP(s);
         break;
+
+    case X86_TYPE_K:
+    	 break;
+	 
+    case X86_TYPE_KM:
+    	 break;
     }
 
     return true;
@@ -1597,6 +1625,14 @@ static bool has_cpuid_feature(DisasContext *s, X86CPUIDFeature cpuid)
         return (s->cpuid_7_0_ebx_features & CPUID_7_0_EBX_BMI2);
     case X86_FEAT_AVX2:
         return (s->cpuid_7_0_ebx_features & CPUID_7_0_EBX_AVX2);
+    case X86_FEAT_AVX512F_DQ_BW:  // this needs to be verified
+        if (s->vex_l <= 1 &&
+            !(s->cpuid_7_0_ebx_features & CPUID_7_0_EBX_AVX512DQ))
+            return false;
+	if (s->vex_l <= 1 &&
+            !(s->cpuid_7_0_ebx_features & CPUID_7_0_EBX_AVX512BW))
+            return false;
+	return (s->cpuid_7_0_ebx_features & CPUID_7_0_EBX_AVX512F);
     case X86_FEAT_AVX512F_VL:
         /* AVX512_CG: assume that vex_l specifies the vector size
            and check for AVX512_VL when size is 128/256 bits. */

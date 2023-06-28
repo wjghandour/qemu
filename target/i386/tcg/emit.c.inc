@@ -725,6 +725,13 @@ UNARY_INT_GVEC(E_VPBROADCASTQ,   tcg_gen_gvec_dup_mem, MO_64)
 UNARY_INT_GVEC(E_VBROADCASTSS,   tcg_gen_gvec_dup_mem, MO_32)
 UNARY_INT_GVEC(E_VBROADCASTSD,   tcg_gen_gvec_dup_mem, MO_64)
 
+// below were added to pass the build
+//this needs to be properly implemented for kmov instructions
+UNARY_INT_GVEC(KMOV_90,   tcg_gen_gvec_dup_mem, MO_64)
+UNARY_INT_GVEC(KMOV_91,   tcg_gen_gvec_dup_mem, MO_64)
+UNARY_INT_GVEC(KMOV_92,   tcg_gen_gvec_dup_mem, MO_64)
+UNARY_INT_GVEC(KMOV_93,   tcg_gen_gvec_dup_mem, MO_64)
+
 
 #define BINARY_INT_GVEC(uname, func, ...)                                          \
 static void gen_##uname(DisasContext *s, CPUX86State *env, X86DecodedInsn *decode) \
